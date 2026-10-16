@@ -75,10 +75,75 @@
         <p>学习 · 实践 · 反馈 · 改进</p>
       </section>
 
+      <section class="assistant-section" id="course-assistant" aria-labelledby="assistant-title">
+        <div class="section-heading assistant-heading">
+          <div>
+            <p class="eyebrow"><span>02</span> AI LEARNING GUIDE</p>
+            <h2 id="assistant-title">和课程助手聊一聊</h2>
+          </div>
+          <p>提出课程、代码与学习方法问题。助手会通过提示和追问，陪你找到自己的解题路径。</p>
+        </div>
+
+        <div class="assistant-shell">
+          <aside class="assistant-guide">
+            <span class="assistant-guide-mark" aria-hidden="true">问</span>
+            <h3>从问题出发，<br />把知识学明白。</h3>
+            <p>选择课程项目后，助手会自动梳理该模块的目标、知识点、实践顺序和常见误区。</p>
+            <ul>
+              <li>只讨论课程与学习相关问题</li>
+              <li>通过思路、提示与追问帮助理解</li>
+              <li>不会直接代写可提交的完整答案</li>
+            </ul>
+          </aside>
+
+          <div class="assistant-chat-card">
+            <div class="assistant-toolbar">
+              <div>
+                <span class="assistant-status-dot"></span>
+                <strong id="assistant-model-status">助手检查中</strong>
+                <small id="assistant-context">通用学习问答</small>
+              </div>
+              <button class="clear-chat-button" id="clear-assistant-chat" type="button">
+                删除聊天记录
+              </button>
+            </div>
+
+            <div class="assistant-messages" id="assistant-messages" role="log" aria-live="polite">
+              <div class="assistant-empty">
+                <strong>今天想学点什么？</strong>
+                <p>可以先说说你正在学习的课程、遇到的困难，或者选择下方项目开始实践。</p>
+              </div>
+            </div>
+
+            <div class="assistant-suggestions" aria-label="快捷提问">
+              <button type="button" data-assistant-suggestion="帮我制定今天的学习计划">制定学习计划</button>
+              <button type="button" data-assistant-suggestion="我应该怎样定位代码中的问题？">学习代码排错</button>
+              <button type="button" data-assistant-suggestion="请用提问的方式检查我是否真正理解了当前模块">检查知识理解</button>
+            </div>
+
+            <form class="assistant-composer" id="assistant-form">
+              <label class="sr-only" for="assistant-input">输入学习问题</label>
+              <textarea
+                id="assistant-input"
+                maxlength="4000"
+                rows="2"
+                placeholder="输入你的学习问题……"
+                required
+              ></textarea>
+              <button id="assistant-send" type="submit">
+                <span>发送</span>
+                <span aria-hidden="true">↗</span>
+              </button>
+            </form>
+            <p class="assistant-storage-note">聊天记录仅保存在当前浏览器中，可随时删除。</p>
+          </div>
+        </div>
+      </section>
+
       <section class="catalog-section" id="module-catalog" aria-labelledby="catalog-title">
         <div class="section-heading">
           <div>
-            <p class="eyebrow"><span>02</span> PROJECT TASK</p>
+            <p class="eyebrow"><span>03</span> PROJECT TASK</p>
             <h2 id="catalog-title">项目代码评测</h2>
           </div>
           <p>完成项目代码后，在这里提交 Python 文件并查看评测结果。</p>
@@ -97,7 +162,7 @@
         <div class="workbench-header">
           <button class="back-button" id="close-workbench" type="button" aria-label="关闭实验台">←</button>
           <div>
-            <p class="eyebrow"><span>03</span> PROJECT REVIEW</p>
+            <p class="eyebrow"><span>04</span> PROJECT REVIEW</p>
             <h2 id="workbench-title">项目评测区</h2>
           </div>
         </div>
@@ -151,7 +216,7 @@
         <section class="history-panel is-hidden" id="submission-history" aria-labelledby="history-title">
           <div class="history-heading">
             <div>
-              <p class="eyebrow"><span>04</span> SUBMISSION HISTORY</p>
+              <p class="eyebrow"><span>05</span> SUBMISSION HISTORY</p>
               <h3 id="history-title">我的提交记录</h3>
             </div>
             <p>源码与评测结果保存在当前浏览器中；清理浏览器数据会删除这些记录。</p>

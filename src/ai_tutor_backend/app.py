@@ -9,6 +9,15 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
+from .assistant import (
+    AssistantChatRequest,
+    AssistantProviderError,
+    AssistantReply,
+    AssistantService,
+    AssistantStatus,
+    AssistantUnavailableError,
+    ModuleIntroductionRequest,
+)
 from .csv_export import execution_to_csv, grade_to_csv
 from .grading import compare_payloads
 from .models import (
@@ -38,6 +47,7 @@ def create_app(
     *,
     registry: CaseRegistry | None = None,
     repository: SQLiteResultRepository | None = None,
+    assistant_service: AssistantService | None = None,
 ) -> FastAPI:
     app = FastAPI(
         title="AI Tutor Backend",
@@ -48,6 +58,7 @@ def create_app(
     default_db = Path(os.getenv("AI_TUTOR_DB_PATH", "var/ai_tutor.db"))
     app.state.repository = repository or SQLiteResultRepository(default_db)
     app.state.execution_service = ExecutionService(app.state.registry, app.state.repository)
+    app.state.assistant_service = assistant_service or AssistantService()
 
     @app.exception_handler(RequestValidationError)
     async def validation_error_handler(
@@ -107,6 +118,24 @@ def create_app(
         )
         return JSONResponse(status_code=422, content=error.model_dump(mode="json"))
 
+    @app.exception_handler(AssistantUnavailableError)
+    async def assistant_unavailable_handler(
+        request: Request, exc: AssistantUnavailableError
+    ) -> JSONResponse:
+        error = ErrorResponse(
+            error=ErrorDetail(code="assistant_unavailable", message=str(exc))
+        )
+        return JSONResponse(status_code=503, content=error.model_dump(mode="json"))
+
+    @app.exception_handler(AssistantProviderError)
+    async def assistant_provider_error_handler(
+        request: Request, exc: AssistantProviderError
+    ) -> JSONResponse:
+        error = ErrorResponse(
+            error=ErrorDetail(code="assistant_provider_error", message=str(exc))
+        )
+        return JSONResponse(status_code=502, content=error.model_dump(mode="json"))
+
     @app.get("/health", tags=["system"])
     async def health() -> dict[str, str]:
         return {"status": "ok", "schema_version": "1.0"}
@@ -118,6 +147,34 @@ def create_app(
     @app.get("/api/v1/cases/{case_id}", response_model=CaseDescriptor, tags=["cases"])
     async def get_case(case_id: str) -> CaseDescriptor:
         return app.state.registry.get(case_id).descriptor
+
+    @app.get(
+        "/api/v1/assistant/status",
+        response_model=AssistantStatus,
+        tags=["assistant"],
+    )
+    async def assistant_status() -> AssistantStatus:
+        return app.state.assistant_service.status()
+
+    @app.post(
+        "/api/v1/assistant/chat",
+        response_model=AssistantReply,
+        tags=["assistant"],
+    )
+    async def assistant_chat(body: AssistantChatRequest) -> AssistantReply:
+        case = app.state.registry.get(body.case_id).descriptor if body.case_id else None
+        return await app.state.assistant_service.chat(body.messages, case)
+
+    @app.post(
+        "/api/v1/assistant/module-introduction",
+        response_model=AssistantReply,
+        tags=["assistant"],
+    )
+    async def assistant_module_introduction(
+        body: ModuleIntroductionRequest,
+    ) -> AssistantReply:
+        case = app.state.registry.get(body.case_id).descriptor
+        return await app.state.assistant_service.introduce(case)
 
     @app.post("/api/v1/executions", response_model=ExecutionResult, tags=["execution"])
     async def execute_case(

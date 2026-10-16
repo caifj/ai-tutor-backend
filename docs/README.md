@@ -14,11 +14,13 @@ JSON/CSV 导出、自动校对和结构化错误讲解。当前已接入案例 3
 - 案例注册表和抽象适配器；正式案例统一放在独立的 `cases/` 目录。
 - FastAPI 自动生成 OpenAPI 文档和统一错误响应。
 - 同源展示前端，自动发现已注册案例并生成模块入口和输入表单。
+- 独立 AI 课程助手，支持浏览器端上下文、删除聊天记录和选中模块后的知识点引导。
 - 默认注册案例 3“网络协议分析仪代码评测”，仅接收 `.py` 文件，以静态分析检查 ARP、
   ICMP、TCP 构造/解析、抓包和异常检测逻辑；浏览器用 IndexedDB 保存本机提交时间线。
 
 完整契约见 [interface.md](interface.md)，案例开发步骤见
-[case-integration-guide.md](case-integration-guide.md)。
+[case-integration-guide.md](case-integration-guide.md)，AI 配置与安全边界见
+[assistant-integration.md](assistant-integration.md)。
 
 已接入正式案例：
 
@@ -33,6 +35,12 @@ python -m venv .venv
 .venv\Scripts\Activate.ps1
 python -m pip install -e ".[dev]"
 uvicorn ai_tutor_backend.main:app --reload
+```
+
+启用 AI 课程助手时，在启动前设置服务端环境变量（不要提交真实 Key）：
+
+```powershell
+$env:SPARK_API_KEY = "在此填写控制台生成的 Key"
 ```
 
 打开 `http://127.0.0.1:8000/` 使用展示前端，或访问 `http://127.0.0.1:8000/docs`
@@ -99,6 +107,7 @@ src/ai_tutor_backend/
   repository.py   SQLite 结果存储
   grading.py      自动校对与差异解释
   csv_export.py   标准长表 CSV 导出
+  assistant/      与案例解耦的 AI 学习问答模块
 tests/            注册、导出、校对和端到端接口测试
 docs/             接口契约
 frontend/dist/    由 FastAPI 同源托管的模块化展示前端

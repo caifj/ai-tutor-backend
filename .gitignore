@@ -9,4 +9,7 @@ __pycache__/
 /build/
 /.coverage
 var/
+.env
+.env.*
+!.env.example
 

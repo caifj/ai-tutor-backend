@@ -4,11 +4,16 @@ const state = {
   latestResult: null,
   uploadedFile: null,
   history: [],
+  assistantMessages: [],
+  assistantCaseId: null,
+  assistantBusy: false,
 };
 
 const CODE_GRADER_CASE_ID = "network.protocol-analyzer";
 const HISTORY_DB_NAME = "ai-tutor-lab";
 const HISTORY_STORE_NAME = "submissions";
+const ASSISTANT_STORE_NAME = "assistant_chat";
+const ASSISTANT_CONTEXT_KEY = "course-assistant-main";
 
 const elements = {
   connectionStatus: document.querySelector("#connection-status"),
@@ -25,6 +30,13 @@ const elements = {
   globalError: document.querySelector("#global-error"),
   globalErrorMessage: document.querySelector("#global-error-message"),
   toast: document.querySelector("#toast"),
+  assistantMessages: document.querySelector("#assistant-messages"),
+  assistantForm: document.querySelector("#assistant-form"),
+  assistantInput: document.querySelector("#assistant-input"),
+  assistantSend: document.querySelector("#assistant-send"),
+  assistantStatus: document.querySelector("#assistant-model-status"),
+  assistantContext: document.querySelector("#assistant-context"),
+  clearAssistantChat: document.querySelector("#clear-assistant-chat"),
 };
 
 function escapeHtml(value) {
@@ -181,6 +193,7 @@ function selectCase(caseId, shouldScroll = true) {
   }
   elements.workbench.classList.remove("is-hidden");
   window.history.replaceState(null, "", `#case=${encodeURIComponent(caseId)}`);
+  introduceSelectedModule(selected);
   if (shouldScroll) elements.workbench.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
@@ -572,7 +585,7 @@ function openHistoryDb() {
       reject(new Error("当前浏览器不支持 IndexedDB"));
       return;
     }
-    const request = window.indexedDB.open(HISTORY_DB_NAME, 1);
+    const request = window.indexedDB.open(HISTORY_DB_NAME, 2);
     request.onupgradeneeded = () => {
       const db = request.result;
       if (!db.objectStoreNames.contains(HISTORY_STORE_NAME)) {
@@ -580,10 +593,188 @@ function openHistoryDb() {
         store.createIndex("case_id", "case_id", { unique: false });
         store.createIndex("created_at", "created_at", { unique: false });
       }
+      if (!db.objectStoreNames.contains(ASSISTANT_STORE_NAME)) {
+        db.createObjectStore(ASSISTANT_STORE_NAME, { keyPath: "id" });
+      }
     };
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error || new Error("无法打开浏览器历史数据库"));
   });
+}
+
+function renderAssistantMessages() {
+  if (!state.assistantMessages.length && !state.assistantBusy) {
+    elements.assistantMessages.innerHTML = `
+      <div class="assistant-empty">
+        <strong>今天想学点什么？</strong>
+        <p>可以先说说你正在学习的课程、遇到的困难，或者选择下方项目开始实践。</p>
+      </div>`;
+    return;
+  }
+  const messages = state.assistantMessages
+    .map(
+      (message) => `
+        <article class="assistant-message ${message.role}">
+          <span>${message.role === "user" ? "我" : "课程助手"}</span>
+          <p>${escapeHtml(message.content)}</p>
+        </article>`,
+    )
+    .join("");
+  const pending = state.assistantBusy
+    ? `<article class="assistant-message assistant is-pending">
+        <span>课程助手</span><p>正在整理思路，请稍候……</p>
+      </article>`
+    : "";
+  elements.assistantMessages.innerHTML = messages + pending;
+  elements.assistantMessages.scrollTop = elements.assistantMessages.scrollHeight;
+}
+
+function setAssistantBusy(isBusy) {
+  state.assistantBusy = isBusy;
+  elements.assistantInput.disabled = isBusy;
+  elements.assistantSend.disabled = isBusy;
+  elements.clearAssistantChat.disabled = isBusy;
+  renderAssistantMessages();
+}
+
+function setAssistantStatus(mode, text) {
+  const dot = document.querySelector(".assistant-status-dot");
+  dot.classList.remove("online", "offline");
+  if (mode) dot.classList.add(mode);
+  elements.assistantStatus.textContent = text;
+}
+
+async function checkAssistantStatus() {
+  try {
+    const response = await apiRequest("/api/v1/assistant/status");
+    setAssistantStatus(
+      response.configured ? "online" : "offline",
+      response.configured ? "课程助手在线" : "课程助手待配置",
+    );
+  } catch {
+    setAssistantStatus("offline", "课程助手暂不可用");
+  }
+}
+
+async function saveAssistantContext() {
+  const db = await openHistoryDb();
+  await new Promise((resolve, reject) => {
+    const transaction = db.transaction(ASSISTANT_STORE_NAME, "readwrite");
+    transaction.objectStore(ASSISTANT_STORE_NAME).put({
+      id: ASSISTANT_CONTEXT_KEY,
+      messages: state.assistantMessages.slice(-30),
+      case_id: state.assistantCaseId,
+      updated_at: new Date().toISOString(),
+    });
+    transaction.oncomplete = resolve;
+    transaction.onerror = () => reject(transaction.error);
+  });
+  db.close();
+}
+
+async function loadAssistantContext() {
+  try {
+    const db = await openHistoryDb();
+    const record = await new Promise((resolve, reject) => {
+      const request = db
+        .transaction(ASSISTANT_STORE_NAME, "readonly")
+        .objectStore(ASSISTANT_STORE_NAME)
+        .get(ASSISTANT_CONTEXT_KEY);
+      request.onsuccess = () => resolve(request.result || null);
+      request.onerror = () => reject(request.error);
+    });
+    db.close();
+    state.assistantMessages = Array.isArray(record?.messages)
+      ? record.messages
+          .filter(
+            (item) =>
+              (item?.role === "user" || item?.role === "assistant") &&
+              typeof item?.content === "string",
+          )
+          .slice(-30)
+      : [];
+    state.assistantCaseId = record?.case_id || null;
+  } catch (error) {
+    state.assistantMessages = [];
+    state.assistantCaseId = null;
+    showToast(`无法读取本机聊天记录：${error.message}`);
+  }
+  renderAssistantMessages();
+}
+
+async function clearAssistantContext() {
+  if (state.assistantBusy) return;
+  try {
+    const db = await openHistoryDb();
+    await new Promise((resolve, reject) => {
+      const transaction = db.transaction(ASSISTANT_STORE_NAME, "readwrite");
+      transaction.objectStore(ASSISTANT_STORE_NAME).delete(ASSISTANT_CONTEXT_KEY);
+      transaction.oncomplete = resolve;
+      transaction.onerror = () => reject(transaction.error);
+    });
+    db.close();
+    state.assistantMessages = [];
+    state.assistantCaseId = null;
+    renderAssistantMessages();
+    showToast("聊天记录已从当前浏览器删除");
+  } catch (error) {
+    showToast(`删除失败：${error.message}`);
+  }
+}
+
+async function askAssistant(question) {
+  const content = String(question || "").trim();
+  if (!content || state.assistantBusy) return;
+  state.assistantMessages.push({ role: "user", content });
+  elements.assistantInput.value = "";
+  setAssistantBusy(true);
+  try {
+    await saveAssistantContext();
+    const response = await apiRequest("/api/v1/assistant/chat", {
+      method: "POST",
+      body: JSON.stringify({
+        messages: state.assistantMessages
+          .slice(-20)
+          .map(({ role, content: messageContent }) => ({ role, content: messageContent })),
+        case_id: state.selectedCase?.case_id || null,
+      }),
+    });
+    state.assistantMessages.push({ role: "assistant", content: response.reply });
+    setAssistantStatus("online", "课程助手在线");
+    await saveAssistantContext();
+  } catch (error) {
+    state.assistantMessages.push({
+      role: "assistant",
+      content: `这次没有成功连接到课程助手。${error.message}`,
+    });
+    setAssistantStatus("offline", "课程助手暂不可用");
+    await saveAssistantContext().catch(() => {});
+  } finally {
+    setAssistantBusy(false);
+    elements.assistantInput.focus();
+  }
+}
+
+async function introduceSelectedModule(selected) {
+  elements.assistantContext.textContent = `正在学习 · ${selected.name}`;
+  if (state.assistantBusy || state.assistantCaseId === selected.case_id) return;
+  state.assistantCaseId = selected.case_id;
+  setAssistantBusy(true);
+  try {
+    const response = await apiRequest("/api/v1/assistant/module-introduction", {
+      method: "POST",
+      body: JSON.stringify({ case_id: selected.case_id }),
+    });
+    state.assistantMessages.push({ role: "assistant", content: response.reply });
+    setAssistantStatus("online", "课程助手在线");
+    await saveAssistantContext();
+  } catch (error) {
+    state.assistantCaseId = null;
+    setAssistantStatus("offline", "课程助手暂不可用");
+    showToast(`模块介绍暂未生成：${error.message}`);
+  } finally {
+    setAssistantBusy(false);
+  }
 }
 
 async function saveSubmissionToBrowser(result, input) {
@@ -719,11 +910,30 @@ document.querySelector("#retry-load").addEventListener("click", loadCases);
 document.querySelector("#compare-versions").addEventListener("click", renderVersionDiff);
 elements.connectionStatus.addEventListener("click", checkHealth);
 elements.caseForm.addEventListener("submit", executeSelectedCase);
+elements.assistantForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  askAssistant(elements.assistantInput.value);
+});
+elements.assistantInput.addEventListener("keydown", (event) => {
+  if (event.key === "Enter" && !event.shiftKey) {
+    event.preventDefault();
+    elements.assistantForm.requestSubmit();
+  }
+});
+elements.clearAssistantChat.addEventListener("click", clearAssistantContext);
+document.querySelectorAll("[data-assistant-suggestion]").forEach((button) => {
+  button.addEventListener("click", () => askAssistant(button.dataset.assistantSuggestion));
+});
 document.querySelector("#close-workbench").addEventListener("click", () => {
   elements.workbench.classList.add("is-hidden");
   window.history.replaceState(null, "", window.location.pathname);
   document.querySelector("#module-catalog").scrollIntoView({ behavior: "smooth" });
 });
 
-checkHealth();
-loadCases();
+async function initializePage() {
+  checkHealth();
+  await loadAssistantContext();
+  await Promise.all([checkAssistantStatus(), loadCases()]);
+}
+
+initializePage();
