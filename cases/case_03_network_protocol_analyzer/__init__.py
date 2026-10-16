@@ -1,5 +1,5 @@
-"""Case 3: network protocol analyzer."""
+"""Case 3: static grader for a student-built network protocol analyzer."""
 
-from .adapter import NetworkProtocolAnalyzerCase
+from .code_grader import NetworkProtocolAnalyzerCase
 
 __all__ = ["NetworkProtocolAnalyzerCase"]

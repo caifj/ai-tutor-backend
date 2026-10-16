@@ -121,7 +121,7 @@
               <div class="panel-title-row">
                 <div>
                   <span class="step-number">01</span>
-                  <h3>设置实验输入</h3>
+                  <h3 id="input-panel-title">设置实验输入</h3>
                 </div>
                 <span class="schema-note">由 JSON Schema 自动生成</span>
               </div>
@@ -153,6 +153,29 @@
             <summary>查看原始 JSON</summary>
             <pre id="raw-json"></pre>
           </details>
+        </section>
+
+        <section class="history-panel is-hidden" id="submission-history" aria-labelledby="history-title">
+          <div class="history-heading">
+            <div>
+              <p class="eyebrow"><span>04</span> LOCAL SUBMISSION HISTORY</p>
+              <h3 id="history-title">本机提交时间线</h3>
+            </div>
+            <p>源码与结果仅存于当前浏览器 IndexedDB；清理站点数据会删除记录。</p>
+          </div>
+          <div class="history-layout">
+            <div class="submission-timeline" id="submission-timeline"></div>
+            <div class="diff-panel">
+              <h4>版本差异</h4>
+              <div class="diff-controls">
+                <label>旧版本<select id="diff-from"></select></label>
+                <span>→</span>
+                <label>新版本<select id="diff-to"></select></label>
+                <button type="button" id="compare-versions">比较</button>
+              </div>
+              <pre class="code-diff" id="code-diff">至少提交两个版本后可进行比较。</pre>
+            </div>
+          </div>
         </section>
       </section>
 

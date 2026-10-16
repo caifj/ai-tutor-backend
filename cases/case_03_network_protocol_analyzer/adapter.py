@@ -345,3 +345,8 @@ class NetworkProtocolAnalyzerCase(CaseAdapter):
             ],
             rows=rows,
         )
+
+
+# Compatibility import: the registered v2 case is the source-code grader.
+# The packet simulator above is retained only as an internal reference implementation.
+from .code_grader import NetworkProtocolAnalyzerCase  # noqa: F401, F811

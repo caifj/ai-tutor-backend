@@ -1,144 +1,88 @@
-# 案例 3：网络协议分析仪
+# 案例 3：网络协议分析仪代码评测
 
-## 目标
+## 目标与边界
 
-本案例对应“计算机网络”课程，提供以下能力：
+本案例接收学生提交的单个 `.py` 文件，判断代码是否覆盖原案例要求：
 
-- 手动构造 ARP、ICMP、TCP 以太网报文。
-- 解析单个十六进制报文。
-- 导入并分析离线捕获记录。
-- 在安装可选依赖和抓包驱动后执行实时抓包。
-- 输出标准化抓包记录、协议字段、原始十六进制和异常流量识别结果。
-- 识别 TCP SYN 端口扫描、TCP Null/Xmas 扫描、异常 SYN+FIN、ICMP 主机扫描、
-  ARP 主机扫描及 ARP 地址冲突。
+- 构造 ARP、ICMP、TCP 报文。
+- 捕获网络报文。
+- 解析 ARP、ICMP、TCP 字段。
+- 识别端口扫描、主机扫描等异常流量。
+- 输出抓包记录和异常识别结果。
 
-案例代码位于：
+后端使用 Python `ast`、`tokenize` 和可解释规则做静态分析，**不会 import、执行代码或发起
+真实抓包**。这保证了基础演示的安全边界。若课程必须验证真实运行结果，应在后续版本中接入
+限制 CPU、内存、网络和文件权限的独立容器沙箱，不能直接在 Web 服务进程中运行学生代码。
+
+核心文件：
 
 ```text
 cases/case_03_network_protocol_analyzer/
-  adapter.py      底座适配、输入模型和标准输出
-  codec.py        ARP/ICMP/TCP 构造与解析
-  capture.py      可选实时抓包入口
-  detection.py    异常流量检测规则
+  code_grader.py  案例描述、输入校验与标准化输出
+  evaluator.py    AST 功能检查、质量评分与问题定位
 ```
 
-所有正式案例统一放在仓库根目录的 `cases/` 下，并由 `cases.register_cases()` 注册。演示插件仍
-位于 `examples/`，不会和正式案例混放。
+## Web 使用方式
 
-## 启动
+1. 启动后端并打开 `http://127.0.0.1:8000/`。
+2. 进入“网络协议分析仪代码评测”。
+3. 选择或拖入一个不超过 500 KB 的 `.py` 文件。
+4. 点击“提交并评测”，查看通过率、总分、分项检查和改进建议。
+5. 再次提交后，可在“本机提交时间线”选择历史版本并查看逐行差异。
 
-正式案例包现在是默认加载项：
+页面不会提供源码文本框或协议参数表单，文件扩展名和大小会在浏览器与后端两端校验。
+可直接使用仓库中的 `examples/case_03_submission.py` 验证完整流程。
 
-```powershell
-cd G:\ai_code
-.\.venv\Scripts\Activate.ps1
-uvicorn ai_tutor_backend.main:app --host 127.0.0.1 --port 8000
-```
+## HTTP 请求
 
-打开 `http://127.0.0.1:8000/`，模块目录会自动出现“网络协议分析仪”。
-
-如需同时加载演示案例：
-
-```powershell
-$env:AI_TUTOR_CASE_MODULES = "cases,examples.demo_case_package"
-uvicorn ai_tutor_backend.main:app --host 127.0.0.1 --port 8000
-```
-
-## 三种操作
-
-### 1. 构造并解析报文
-
-选择 `operation=construct`，再选择 `ARP`、`ICMP` 或 `TCP`。构造器会计算 IPv4、ICMP、
-TCP 校验和，并将构造结果立即交给解析器验证。
-
-请求示例：
+浏览器读取文件文本后仍通过统一 JSON 接口提交：
 
 ```json
 {
   "case_id": "network.protocol-analyzer",
   "input": {
-    "operation": "construct",
-    "protocol": "TCP",
-    "source_mac": "02:00:00:00:00:01",
-    "destination_mac": "ff:ff:ff:ff:ff:ff",
-    "source_ip": "192.168.1.10",
-    "destination_ip": "192.168.1.1",
-    "source_port": 40000,
-    "destination_port": 80,
-    "tcp_flags": "SYN",
-    "payload_text": "AI Tutor"
+    "filename": "student_analyzer.py",
+    "source_code": "from scapy.all import ARP, ICMP, TCP, sniff\n..."
   }
 }
 ```
 
-### 2. 解析十六进制报文
+`source_code` 最大 500,000 字符；`filename` 必须以 `.py` 结尾。接口保持 JSON/CSV 标准输出，
+其中 CSV 通过结果下载入口生成。
 
-选择 `operation=analyze`，并把完整以太网帧放入 `packet_hex`。输入可以包含空格、冒号、
-连字符或换行，但不能只提供 IP/TCP 片段。
+## 评分组成
 
-```json
-{
-  "case_id": "network.protocol-analyzer",
-  "input": {
-    "operation": "analyze",
-    "packet_hex": "ffffffffffff0200000000010806..."
-  }
-}
-```
+总分为 100 分：
 
-### 3. 分析捕获记录
+- 功能覆盖 70 分：9 项静态检查，包含三类协议的构造与解析、抓包、扫描检测和结构化输出。
+- PEP8 规范 10 分：长行、Tab 缩进、行尾空白、通配符导入和命名等启发式检查。
+- 模块化程度 10 分：函数/类拆分、文档字符串和超长函数。
+- 重复代码 10 分：连续有效代码行的重复片段检测。
 
-离线方式无需抓包权限，适合教学数据集和自动测试。选择 `operation=capture`、
-`capture_source=offline`，把记录数组序列化后放入 `capture_packets_json`：
+输出数据集：
 
-```json
-[
-  {
-    "timestamp": "2026-10-16T10:00:00Z",
-    "packet_hex": "完整以太网帧十六进制"
-  },
-  "也可以直接放十六进制字符串"
-]
-```
+- `functional_tests`：每项要求的通过状态、权重、证据和建议。
+- `quality_scores`：PEP8、模块化、重复代码的分数和依据。
+- `code_issues`：问题级别、行号、规则编号和修复建议。
 
-`scan_threshold` 控制同一来源访问多少个不同端口或主机后报告扫描，默认值为 4。
+前端将功能与质量明细展示为可展开面板；原始 JSON 与 CSV 仍可用于后续系统对接。
 
-## 实时抓包
+## 浏览器缓存方案
 
-实时抓包是可选功能，避免基础安装强制依赖系统驱动。安装 Python 依赖：
+可以通过浏览器缓存实现本机演示，本项目使用 **IndexedDB**，不使用 `localStorage`：
 
-```powershell
-python -m pip install -e ".[capture]"
-```
+- 每次评测保存源码、文件名、时间、标准结果和请求 ID。
+- 时间线按提交时间倒序展示。
+- 任意两个本机版本可进行逐行差异比较。
+- 数据只保存在当前浏览器和当前站点，不会自动跨设备同步。
 
-Windows 还需要安装 Npcap，并通常要用管理员权限启动后端。随后选择：
+清理浏览器站点数据、使用隐私模式或更换浏览器都会导致历史丢失。IndexedDB 适合原型演示，
+但不适合作为正式教学档案。正式环境应把提交版本保存到受权限控制的服务端数据库，并定义
+保留期限、容量限制和隐私策略。
 
-```json
-{
-  "operation": "capture",
-  "capture_source": "live",
-  "capture_interface": "",
-  "capture_count": 20,
-  "capture_timeout": 5,
-  "scan_threshold": 4
-}
-```
+## 静态评测限制
 
-实时抓包只应在本人管理或明确获准分析的网络中使用。底座限制单次最多 100 个目标协议报文、
-超时最多 15 秒，避免 HTTP 请求无限占用抓包资源。
-
-## 标准输出
-
-输出包含两个数据集：
-
-- `packet_records`：时间、协议、源、目标、长度、摘要、解析字段和原始报文。
-- `anomaly_findings`：异常代码、严重程度、来源、目标、判定依据和处置建议。
-
-指标包括报文总数、无效报文数、总字节数、各协议计数、异常数量和扫描阈值。所有结果均可
-通过底座导出为 JSON 或 CSV。
-
-## 限制
-
-- 当前解析器面向 Ethernet II、可选单层 802.1Q VLAN、ARP over IPv4、IPv4 ICMP 和 IPv4 TCP。
-- 暂不重组 IPv4 分片或 TCP 流，也不解析 IPv6、UDP、应用层协议或加密内容。
-- 扫描检测是教学规则，不应替代生产 IDS/IPS；告警需要结合资产、时间窗口和业务流量复核。
+- 规则只能判断代码结构与可识别的实现迹象，不能证明运行结果一定正确。
+- 动态生成、别名封装或特殊第三方库可能造成漏报；只写关键词也可能造成误报。
+- 当前重复代码和 PEP8 评分是轻量启发式实现，不等同于完整 Ruff/Pylint 或克隆检测器。
+- 页面显示的结论应作为自动初筛，并允许教师展开证据后人工复核。

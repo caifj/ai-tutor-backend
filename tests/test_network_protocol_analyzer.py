@@ -1,93 +1,124 @@
 from __future__ import annotations
 
-import json
-
 import pytest
 
 from ai_tutor_backend.models import ExecutionContext
 from ai_tutor_backend.registry import CaseInputError, CaseRegistry
 from cases import register_cases
 from cases.case_03_network_protocol_analyzer import NetworkProtocolAnalyzerCase
-from cases.case_03_network_protocol_analyzer.codec import build_packet, parse_packet
 
-BASE_BUILD_ARGS = {
-    "source_mac": "02:00:00:00:00:01",
-    "destination_mac": "ff:ff:ff:ff:ff:ff",
-    "source_ip": "192.168.1.10",
-    "destination_ip": "192.168.1.1",
-    "source_port": 40000,
-    "destination_port": 80,
-    "tcp_flags": "SYN",
-    "arp_operation": "request",
-    "payload_text": "AI Tutor",
-}
+COMPLETE_SUBMISSION = '''
+from collections import defaultdict
+from scapy.all import ARP, ICMP, IP, TCP, Ether, sniff
 
 
-@pytest.mark.parametrize("protocol", ["ARP", "ICMP", "TCP"])
-def test_build_and_parse_supported_protocols(protocol: str) -> None:
-    frame = build_packet(protocol=protocol, **BASE_BUILD_ARGS)
-
-    packet = parse_packet(frame)
-
-    assert packet.protocol == protocol
-    assert packet.length == len(frame)
-    assert packet.fields["source_mac"] == "02:00:00:00:00:01"
-    if protocol in {"ICMP", "TCP"}:
-        assert packet.fields["ip_checksum_valid"] is True
-    if protocol == "TCP":
-        assert packet.fields["tcp_checksum_valid"] is True
-        assert packet.fields["tcp_flags"] == ["SYN"]
+def build_arp_packet(source, target):
+    """Build an ARP request."""
+    return Ether() / ARP(psrc=source, pdst=target)
 
 
-def test_case_registers_and_constructs_a_packet() -> None:
+def build_icmp_packet(source, target):
+    """Build an ICMP echo request."""
+    return IP(src=source, dst=target) / ICMP(type=8)
+
+
+def build_tcp_packet(source, target, port):
+    """Build a TCP SYN packet."""
+    return IP(src=source, dst=target) / TCP(dport=port, flags="S")
+
+
+def capture_packets(count=20):
+    """Capture packets with a finite count and timeout."""
+    return sniff(count=count, timeout=5)
+
+
+def parse_arp_packet(packet):
+    """Parse ARP fields."""
+    return {"source": packet[ARP].psrc, "target": packet[ARP].pdst}
+
+
+def parse_icmp_packet(packet):
+    """Parse ICMP fields."""
+    return {"type": packet[ICMP].type, "code": packet[ICMP].code}
+
+
+def parse_tcp_packet(packet):
+    """Parse TCP fields."""
+    return {"source_port": packet[TCP].sport, "target_port": packet[TCP].dport}
+
+
+def detect_port_scan(packets, threshold=4):
+    """Detect a source contacting many distinct destination ports."""
+    unique_ports = defaultdict(set)
+    for packet in packets:
+        if packet.haslayer(TCP) and packet[TCP].flags == "S":
+            unique_ports[packet[IP].src].add(packet[TCP].dport)
+    return [source for source, ports in unique_ports.items() if len(ports) >= threshold]
+
+
+def analyze():
+    """Return structured capture and anomaly results."""
+    packets = capture_packets()
+    packet_records = [parse_tcp_packet(packet) for packet in packets if packet.haslayer(TCP)]
+    anomaly_findings = detect_port_scan(packets)
+    return {"packet_records": packet_records, "anomaly_findings": anomaly_findings}
+'''
+
+
+def execute(source: str, filename: str = "student.py"):
+    return NetworkProtocolAnalyzerCase().execute(
+        {"filename": filename, "source_code": source},
+        ExecutionContext(request_id="test-request"),
+    )
+
+
+def test_case_registers_with_python_file_schema() -> None:
     registry = CaseRegistry()
     register_cases(registry)
 
     adapter = registry.get("network.protocol-analyzer")
-    result = adapter.execute(
-        {"operation": "construct", "protocol": "ICMP"},
-        ExecutionContext(request_id="test-request"),
-    )
 
     assert isinstance(adapter, NetworkProtocolAnalyzerCase)
-    assert result.metrics["packet_count"] == 1
-    assert result.datasets[0].rows[0]["protocol"] == "ICMP"
-    assert result.datasets[1].rows == []
+    assert adapter.descriptor.version == "2.0.0"
+    assert adapter.descriptor.input_schema["x-ui-mode"] == "python-file"
+    assert set(adapter.descriptor.input_schema["properties"]) == {"filename", "source_code"}
 
 
-def test_offline_capture_detects_tcp_syn_port_scan() -> None:
-    capture = []
-    for port in (22, 23, 80, 443):
-        args = {**BASE_BUILD_ARGS, "destination_port": port}
-        capture.append(
-            {
-                "timestamp": f"2026-10-16T10:00:0{port % 10}Z",
-                "packet_hex": build_packet(protocol="TCP", **args).hex(),
-            }
+def test_complete_submission_passes_core_static_checks() -> None:
+    result = execute(COMPLETE_SUBMISSION)
+    checks = {row["check_id"]: row for row in result.datasets[0].rows}
+
+    assert result.metrics["syntax_valid"] is True
+    assert result.metrics["tests_passed"] == result.metrics["tests_total"]
+    assert result.metrics["test_pass_rate"] == 100.0
+    assert result.metrics["overall_score"] >= 90
+    assert all(row["passed"] for row in checks.values())
+
+
+def test_incomplete_submission_gets_explainable_failures() -> None:
+    result = execute("def hello():\n    return 'hello'\n")
+    checks = result.datasets[0].rows
+
+    assert result.metrics["syntax_valid"] is True
+    assert result.metrics["tests_passed"] == 0
+    assert any("未" in row["evidence"] for row in checks)
+    assert result.datasets[1].name == "quality_scores"
+    assert result.datasets[2].name == "code_issues"
+
+
+def test_syntax_error_returns_zero_score_and_line_number() -> None:
+    result = execute("def broken(:\n    pass\n")
+
+    assert result.metrics["syntax_valid"] is False
+    assert result.metrics["overall_score"] == 0.0
+    assert result.datasets[2].rows[0]["line"] == 1
+    assert result.diagnostics[0].code == "PYTHON_SYNTAX_ERROR"
+
+
+@pytest.mark.parametrize("input_data", [{}, {"filename": "answer.txt", "source_code": "pass"}])
+def test_submission_rejects_missing_or_non_python_file(input_data: dict) -> None:
+    with pytest.raises(CaseInputError, match="代码文件输入不合法"):
+        NetworkProtocolAnalyzerCase().execute(
+            input_data,
+            ExecutionContext(request_id="test-request"),
         )
-
-    result = NetworkProtocolAnalyzerCase().execute(
-        {
-            "operation": "capture",
-            "capture_source": "offline",
-            "capture_packets_json": json.dumps(capture),
-            "scan_threshold": 4,
-        },
-        ExecutionContext(request_id="test-request"),
-    )
-
-    findings = result.datasets[1].rows
-    assert result.metrics["packet_count"] == 4
-    assert result.metrics["anomaly_count"] == 1
-    assert findings[0]["code"] == "TCP_SYN_PORT_SCAN"
-    assert "22" in findings[0]["evidence"]
-
-
-def test_analyze_rejects_invalid_or_missing_hex() -> None:
-    adapter = NetworkProtocolAnalyzerCase()
-    context = ExecutionContext(request_id="test-request")
-
-    with pytest.raises(CaseInputError, match="必须提供"):
-        adapter.execute({"operation": "analyze"}, context)
-    with pytest.raises(CaseInputError, match="格式不合法"):
-        adapter.execute({"operation": "analyze", "packet_hex": "not-hex"}, context)

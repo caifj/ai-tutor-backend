@@ -2,7 +2,13 @@ const state = {
   cases: [],
   selectedCase: null,
   latestResult: null,
+  uploadedFile: null,
+  history: [],
 };
+
+const CODE_GRADER_CASE_ID = "network.protocol-analyzer";
+const HISTORY_DB_NAME = "ai-tutor-lab";
+const HISTORY_STORE_NAME = "submissions";
 
 const elements = {
   connectionStatus: document.querySelector("#connection-status"),
@@ -13,6 +19,9 @@ const elements = {
   dynamicFields: document.querySelector("#dynamic-fields"),
   runCase: document.querySelector("#run-case"),
   resultPanel: document.querySelector("#result-panel"),
+  historyPanel: document.querySelector("#submission-history"),
+  submissionTimeline: document.querySelector("#submission-timeline"),
+  codeDiff: document.querySelector("#code-diff"),
   globalError: document.querySelector("#global-error"),
   globalErrorMessage: document.querySelector("#global-error-message"),
   toast: document.querySelector("#toast"),
@@ -144,6 +153,7 @@ function selectCase(caseId, shouldScroll = true) {
   if (!selected) return;
   state.selectedCase = selected;
   state.latestResult = null;
+  state.uploadedFile = null;
   const index = state.cases.findIndex((item) => item.case_id === caseId) + 1;
 
   document.querySelector("#case-index").textContent = `M-${String(index).padStart(2, "0")}`;
@@ -160,12 +170,23 @@ function selectCase(caseId, shouldScroll = true) {
 
   renderInputForm(selected.input_schema || {});
   elements.resultPanel.classList.add("is-hidden");
+  elements.historyPanel.classList.toggle("is-hidden", caseId !== CODE_GRADER_CASE_ID);
+  if (caseId === CODE_GRADER_CASE_ID) {
+    loadSubmissionHistory();
+  }
   elements.workbench.classList.remove("is-hidden");
   window.history.replaceState(null, "", `#case=${encodeURIComponent(caseId)}`);
   if (shouldScroll) elements.workbench.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 function renderInputForm(schema) {
+  document.querySelector("#input-panel-title").textContent = "设置实验输入";
+  document.querySelector(".schema-note").textContent = "由 JSON Schema 自动生成";
+  elements.runCase.querySelector("span:first-child").textContent = "运行模块";
+  if (schema["x-ui-mode"] === "python-file") {
+    renderPythonFileUploader(schema);
+    return;
+  }
   const properties = schema.properties || {};
   const required = new Set(schema.required || []);
   const entries = Object.entries(properties);
@@ -183,6 +204,84 @@ function renderInputForm(schema) {
   elements.dynamicFields.innerHTML = entries
     .map(([name, definition]) => createField(name, definition, required.has(name)))
     .join("");
+}
+
+function renderPythonFileUploader(schema) {
+  const maxBytes = Number(schema["x-max-file-bytes"] || 500000);
+  document.querySelector("#input-panel-title").textContent = "提交 Python 代码";
+  document.querySelector(".schema-note").textContent = "仅接受单个 .py 文件";
+  elements.runCase.querySelector("span:first-child").textContent = "提交并评测";
+  elements.dynamicFields.innerHTML = `
+    <div class="python-upload full-width">
+      <input id="python-file" type="file" accept=".py,text/x-python" hidden />
+      <button class="drop-zone" id="python-drop-zone" type="button">
+        <span class="drop-icon">PY</span>
+        <strong>选择或拖入 Python 文件</strong>
+        <small>只读取 .py 文件，最大 ${Math.round(maxBytes / 1000)} KB</small>
+      </button>
+      <div class="selected-file is-hidden" id="selected-file">
+        <div><strong id="selected-file-name"></strong><span id="selected-file-meta"></span></div>
+        <button type="button" id="replace-file">重新选择</button>
+      </div>
+      <details class="source-preview is-hidden" id="source-preview">
+        <summary>预览待评测源码</summary>
+        <pre id="source-preview-code"></pre>
+      </details>
+      <p class="upload-safety">后端仅做 AST 与结构规则分析，不会 import 或执行上传代码。</p>
+    </div>`;
+
+  const input = document.querySelector("#python-file");
+  const zone = document.querySelector("#python-drop-zone");
+  const openPicker = () => input.click();
+  zone.addEventListener("click", openPicker);
+  document.querySelector("#replace-file").addEventListener("click", openPicker);
+  input.addEventListener("change", () => acceptPythonFile(input.files?.[0], maxBytes));
+  zone.addEventListener("dragover", (event) => {
+    event.preventDefault();
+    zone.classList.add("dragging");
+  });
+  zone.addEventListener("dragleave", () => zone.classList.remove("dragging"));
+  zone.addEventListener("drop", (event) => {
+    event.preventDefault();
+    zone.classList.remove("dragging");
+    acceptPythonFile(event.dataTransfer?.files?.[0], maxBytes);
+  });
+}
+
+async function acceptPythonFile(file, maxBytes) {
+  if (!file) return;
+  if (!file.name.toLowerCase().endsWith(".py")) {
+    showToast("仅允许提交扩展名为 .py 的文件");
+    return;
+  }
+  if (file.size > maxBytes) {
+    showToast(`文件不能超过 ${Math.round(maxBytes / 1000)} KB`);
+    return;
+  }
+  try {
+    const source = await file.text();
+    if (!source.trim()) throw new Error("文件内容为空");
+    state.uploadedFile = {
+      name: file.name,
+      size: file.size,
+      lastModified: file.lastModified,
+      source,
+    };
+    document.querySelector("#selected-file-name").textContent = file.name;
+    document.querySelector("#selected-file-meta").textContent =
+      `${formatBytes(file.size)} · ${source.split(/\r?\n/).length} 行`;
+    document.querySelector("#selected-file").classList.remove("is-hidden");
+    document.querySelector("#source-preview").classList.remove("is-hidden");
+    document.querySelector("#source-preview-code").textContent = source;
+    showToast("文件已读取，可以提交评测");
+  } catch (error) {
+    showToast(`无法读取文件：${error.message}`);
+  }
+}
+
+function formatBytes(bytes) {
+  if (bytes < 1000) return `${bytes} B`;
+  return `${(bytes / 1000).toFixed(1)} KB`;
 }
 
 function createField(name, definition, isRequired) {
@@ -244,6 +343,13 @@ function buildConstraintHint(definition) {
 }
 
 function collectInput() {
+  if (state.selectedCase?.input_schema?.["x-ui-mode"] === "python-file") {
+    if (!state.uploadedFile) throw new Error("请先选择一个 .py 文件");
+    return {
+      filename: state.uploadedFile.name,
+      source_code: state.uploadedFile.source,
+    };
+  }
   const rawField = elements.caseForm.elements.namedItem("__raw_input");
   if (rawField) {
     const parsed = JSON.parse(rawField.value);
@@ -289,13 +395,18 @@ async function executeSelectedCase(event) {
     });
     state.latestResult = result;
     renderResult(result);
+    if (state.selectedCase.case_id === CODE_GRADER_CASE_ID) {
+      await saveSubmissionToBrowser(result, input);
+      await loadSubmissionHistory();
+    }
     showToast("模块运行完成");
   } catch (error) {
     const firstDetail = error.details?.errors?.[0]?.msg;
     showToast(firstDetail ? `${error.message}：${firstDetail}` : error.message);
   } finally {
     elements.runCase.disabled = false;
-    elements.runCase.querySelector("span:first-child").textContent = "运行模块";
+    elements.runCase.querySelector("span:first-child").textContent =
+      state.selectedCase?.case_id === CODE_GRADER_CASE_ID ? "提交并评测" : "运行模块";
   }
 }
 
@@ -320,9 +431,10 @@ function renderResult(result) {
         .join("")
     : "";
 
-  document.querySelector("#dataset-results").innerHTML = (payload.datasets || [])
-    .map(renderDataset)
-    .join("");
+  document.querySelector("#dataset-results").innerHTML =
+    result.case_id === CODE_GRADER_CASE_ID
+      ? renderCodeEvaluation(payload)
+      : (payload.datasets || []).map(renderDataset).join("");
   document.querySelector("#diagnostic-list").innerHTML = (payload.diagnostics || [])
     .map(
       (item) => `<div class="diagnostic-item ${escapeHtml(item.level)}">
@@ -372,11 +484,205 @@ function renderDataset(dataset) {
   </section>`;
 }
 
+function findDataset(payload, name) {
+  return (payload.datasets || []).find((dataset) => dataset.name === name) || { rows: [] };
+}
+
+function renderCodeEvaluation(payload) {
+  const tests = findDataset(payload, "functional_tests").rows;
+  const quality = findDataset(payload, "quality_scores").rows;
+  const issues = findDataset(payload, "code_issues");
+  const testDetails = tests
+    .map(
+      (item) => `<details class="evaluation-detail ${item.passed ? "passed" : "failed"}">
+        <summary>
+          <span class="check-state">${item.passed ? "通过" : "待完善"}</span>
+          <strong>${escapeHtml(item.title)}</strong>
+          <b>${escapeHtml(item.earned)} / ${escapeHtml(item.weight)}</b>
+        </summary>
+        <div class="evaluation-body">
+          <p><span>判定证据</span>${escapeHtml(item.evidence)}</p>
+          <p><span>改进建议</span>${escapeHtml(item.suggestion)}</p>
+        </div>
+      </details>`,
+    )
+    .join("");
+  const qualityCards = quality
+    .map(
+      (item) => `<details class="quality-card">
+        <summary>
+          <span>${escapeHtml(item.dimension)}</span>
+          <strong>${escapeHtml(item.score)}<small>/${escapeHtml(item.max_score)}</small></strong>
+        </summary>
+        <p>${escapeHtml(item.summary)}</p>
+        <div class="quality-bar"><i style="width:${Math.max(0, Math.min(100, item.score * 10))}%"></i></div>
+        <small>${escapeHtml(item.details)}</small>
+      </details>`,
+    )
+    .join("");
+  return `
+    <section class="evaluation-section">
+      <div class="dataset-title"><h4>功能检查</h4><span>${tests.filter((item) => item.passed).length} / ${tests.length} PASSED</span></div>
+      <div class="evaluation-list">${testDetails}</div>
+    </section>
+    <section class="evaluation-section">
+      <div class="dataset-title"><h4>代码质量</h4><span>点击展开评分依据</span></div>
+      <div class="quality-grid">${qualityCards}</div>
+    </section>
+    ${renderDataset(issues)}`;
+}
+
+function openHistoryDb() {
+  return new Promise((resolve, reject) => {
+    if (!window.indexedDB) {
+      reject(new Error("当前浏览器不支持 IndexedDB"));
+      return;
+    }
+    const request = window.indexedDB.open(HISTORY_DB_NAME, 1);
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains(HISTORY_STORE_NAME)) {
+        const store = db.createObjectStore(HISTORY_STORE_NAME, { keyPath: "id" });
+        store.createIndex("case_id", "case_id", { unique: false });
+        store.createIndex("created_at", "created_at", { unique: false });
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error || new Error("无法打开浏览器历史数据库"));
+  });
+}
+
+async function saveSubmissionToBrowser(result, input) {
+  try {
+    const db = await openHistoryDb();
+    await new Promise((resolve, reject) => {
+      const transaction = db.transaction(HISTORY_STORE_NAME, "readwrite");
+      transaction.objectStore(HISTORY_STORE_NAME).put({
+        id: result.request_id,
+        case_id: result.case_id,
+        created_at: result.created_at || new Date().toISOString(),
+        filename: input.filename,
+        source_code: input.source_code,
+        result,
+      });
+      transaction.oncomplete = resolve;
+      transaction.onerror = () => reject(transaction.error);
+    });
+    db.close();
+  } catch (error) {
+    showToast(`评测已完成，但本机历史保存失败：${error.message}`);
+  }
+}
+
+async function loadSubmissionHistory() {
+  if (state.selectedCase?.case_id !== CODE_GRADER_CASE_ID) return;
+  try {
+    const db = await openHistoryDb();
+    const all = await new Promise((resolve, reject) => {
+      const request = db
+        .transaction(HISTORY_STORE_NAME, "readonly")
+        .objectStore(HISTORY_STORE_NAME)
+        .getAll();
+      request.onsuccess = () => resolve(request.result || []);
+      request.onerror = () => reject(request.error);
+    });
+    db.close();
+    state.history = all
+      .filter((item) => item.case_id === CODE_GRADER_CASE_ID)
+      .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
+    renderSubmissionHistory();
+  } catch (error) {
+    state.history = [];
+    elements.submissionTimeline.innerHTML = `<p class="history-empty">无法读取本机历史：${escapeHtml(error.message)}</p>`;
+  }
+}
+
+function renderSubmissionHistory() {
+  if (!state.history.length) {
+    elements.submissionTimeline.innerHTML =
+      '<p class="history-empty">尚无本机提交。完成第一次评测后，这里会出现版本记录。</p>';
+  } else {
+    elements.submissionTimeline.innerHTML = state.history
+      .map((item, index) => {
+        const metrics = item.result?.payload?.metrics || {};
+        const time = new Date(item.created_at).toLocaleString("zh-CN", { hour12: false });
+        return `<button class="timeline-item" type="button" data-history-id="${escapeHtml(item.id)}">
+          <span class="timeline-dot"></span>
+          <span><b>V${state.history.length - index}</b><strong>${escapeHtml(item.filename)}</strong><small>${escapeHtml(time)}</small></span>
+          <em>${escapeHtml(metrics.overall_score ?? "—")}<small>总分</small></em>
+        </button>`;
+      })
+      .join("");
+    elements.submissionTimeline.querySelectorAll("[data-history-id]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const record = state.history.find((item) => item.id === button.dataset.historyId);
+        if (record?.result) renderResult(record.result);
+      });
+    });
+  }
+  updateDiffSelectors();
+}
+
+function updateDiffSelectors() {
+  const options = state.history
+    .map((item, index) => `<option value="${escapeHtml(item.id)}">V${state.history.length - index} · ${escapeHtml(item.filename)}</option>`)
+    .join("");
+  const from = document.querySelector("#diff-from");
+  const to = document.querySelector("#diff-to");
+  from.innerHTML = options || '<option value="">暂无版本</option>';
+  to.innerHTML = options || '<option value="">暂无版本</option>';
+  if (state.history.length >= 2) {
+    from.value = state.history[1].id;
+    to.value = state.history[0].id;
+    renderVersionDiff();
+  } else {
+    elements.codeDiff.textContent = "至少提交两个版本后可进行比较。";
+  }
+}
+
+function renderVersionDiff() {
+  const oldRecord = state.history.find((item) => item.id === document.querySelector("#diff-from").value);
+  const newRecord = state.history.find((item) => item.id === document.querySelector("#diff-to").value);
+  if (!oldRecord || !newRecord) {
+    showToast("请选择两个可比较的版本");
+    return;
+  }
+  const lines = lineDiff(oldRecord.source_code || "", newRecord.source_code || "");
+  elements.codeDiff.innerHTML = lines
+    .map(({ type, text }) => `<span class="diff-${type}">${type === "add" ? "+" : type === "remove" ? "−" : " "} ${escapeHtml(text)}</span>`)
+    .join("\n");
+}
+
+function lineDiff(before, after) {
+  const left = before.split(/\r?\n/).slice(0, 400);
+  const right = after.split(/\r?\n/).slice(0, 400);
+  const matrix = Array.from({ length: left.length + 1 }, () => new Uint16Array(right.length + 1));
+  for (let i = left.length - 1; i >= 0; i -= 1) {
+    for (let j = right.length - 1; j >= 0; j -= 1) {
+      matrix[i][j] = left[i] === right[j] ? matrix[i + 1][j + 1] + 1 : Math.max(matrix[i + 1][j], matrix[i][j + 1]);
+    }
+  }
+  const result = [];
+  let i = 0;
+  let j = 0;
+  while (i < left.length || j < right.length) {
+    if (i < left.length && j < right.length && left[i] === right[j]) {
+      result.push({ type: "same", text: left[i] }); i += 1; j += 1;
+    } else if (j < right.length && (i === left.length || matrix[i][j + 1] >= matrix[i + 1][j])) {
+      result.push({ type: "add", text: right[j] }); j += 1;
+    } else {
+      result.push({ type: "remove", text: left[i] }); i += 1;
+    }
+  }
+  return result;
+}
+
 document.querySelector("#refresh-cases").addEventListener("click", () => {
   loadCases();
   document.querySelector("#module-catalog").scrollIntoView({ behavior: "smooth" });
 });
 document.querySelector("#retry-load").addEventListener("click", loadCases);
+document.querySelector("#compare-versions").addEventListener("click", renderVersionDiff);
 elements.connectionStatus.addEventListener("click", checkHealth);
 elements.caseForm.addEventListener("submit", executeSelectedCase);
 document.querySelector("#close-workbench").addEventListener("click", () => {

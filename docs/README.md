@@ -14,14 +14,15 @@ JSON/CSV 导出、自动校对和结构化错误讲解。当前已接入案例 3
 - 案例注册表和抽象适配器；正式案例统一放在独立的 `cases/` 目录。
 - FastAPI 自动生成 OpenAPI 文档和统一错误响应。
 - 同源展示前端，自动发现已注册案例并生成模块入口和输入表单。
-- 默认注册案例 3“网络协议分析仪”，支持 ARP、ICMP、TCP 构造、解析和异常检测。
+- 默认注册案例 3“网络协议分析仪代码评测”，仅接收 `.py` 文件，以静态分析检查 ARP、
+  ICMP、TCP 构造/解析、抓包和异常检测逻辑；浏览器用 IndexedDB 保存本机提交时间线。
 
 完整契约见 [interface.md](interface.md)，案例开发步骤见
 [case-integration-guide.md](case-integration-guide.md)。
 
 已接入正式案例：
 
-- [案例 3：网络协议分析仪](cases/network-protocol-analyzer.md)
+- [案例 3：网络协议分析仪代码评测](cases/network-protocol-analyzer.md)
 
 ## 启动
 
