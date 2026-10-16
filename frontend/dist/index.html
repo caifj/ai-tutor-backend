@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="AI 助教实验中枢——自动发现后端教学案例、生成输入表单并展示标准化结果。"
+    />
+    <title>知行实验室 · AI 助教</title>
+    <link rel="stylesheet" href="/assets/styles.css" />
+  </head>
+  <body>
+    <div class="page-grid" aria-hidden="true"></div>
+
+    <header class="topbar">
+      <a class="brand" href="#top" aria-label="返回首页">
+        <span class="brand-mark" aria-hidden="true">知</span>
+        <span>
+          <strong>知行实验室</strong>
+          <small>AI TUTOR LAB</small>
+        </span>
+      </a>
+
+      <nav class="top-actions" aria-label="快捷入口">
+        <a href="/docs" target="_blank" rel="noreferrer">API 文档</a>
+        <button class="status-pill" id="connection-status" type="button" title="刷新连接状态">
+          <span class="status-dot"></span>
+          <span>连接中</span>
+        </button>
+      </nav>
+    </header>
+
+    <main id="top">
+      <section class="hero" aria-labelledby="hero-title">
+        <div class="hero-copy">
+          <p class="eyebrow"><span>01</span> 教学案例统一工作台</p>
+          <h1 id="hero-title">把复杂过程，<br /><em>讲清楚。</em></h1>
+          <p class="hero-lead">
+            一个面向计算机课程的交互式实验入口。后端每注册一个案例，模块目录就会自动更新，
+            无需重复开发页面路由。
+          </p>
+          <div class="hero-actions">
+            <a class="primary-button" href="#module-catalog">进入模块目录 <span>↘</span></a>
+            <button class="text-button" id="refresh-cases" type="button">重新同步模块</button>
+          </div>
+        </div>
+
+        <div class="hero-visual" aria-label="平台能力概览">
+          <div class="orbit orbit-one"></div>
+          <div class="orbit orbit-two"></div>
+          <div class="core-badge">
+            <span>CORE</span>
+            <strong>1.0</strong>
+          </div>
+          <div class="capability-tag tag-json">JSON</div>
+          <div class="capability-tag tag-csv">CSV</div>
+          <div class="capability-tag tag-grade">AUTO<br />GRADE</div>
+          <p class="visual-caption">标准协议驱动<br />模块自由生长</p>
+        </div>
+      </section>
+
+      <section class="overview-strip" aria-label="平台状态">
+        <div>
+          <span class="stat-value" id="module-count">—</span>
+          <span class="stat-label">已接入模块</span>
+        </div>
+        <div>
+          <span class="stat-value">2</span>
+          <span class="stat-label">输出格式</span>
+        </div>
+        <div>
+          <span class="stat-value">1.0</span>
+          <span class="stat-label">协议版本</span>
+        </div>
+        <p>发现 · 执行 · 读取 · 校对</p>
+      </section>
+
+      <section class="catalog-section" id="module-catalog" aria-labelledby="catalog-title">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow"><span>02</span> MODULE CATALOG</p>
+            <h2 id="catalog-title">选择一个实验模块</h2>
+          </div>
+          <p>目录直接读取后端注册表。新模块上线后，将自动出现在这里。</p>
+        </div>
+
+        <div class="module-grid" id="module-grid" aria-live="polite">
+          <article class="module-card skeleton-card" aria-hidden="true">
+            <div class="skeleton line-short"></div>
+            <div class="skeleton line-long"></div>
+            <div class="skeleton block"></div>
+          </article>
+        </div>
+      </section>
+
+      <section class="workbench-section is-hidden" id="workbench" aria-labelledby="workbench-title">
+        <div class="workbench-header">
+          <button class="back-button" id="close-workbench" type="button" aria-label="关闭实验台">←</button>
+          <div>
+            <p class="eyebrow"><span>03</span> INTERACTIVE WORKBENCH</p>
+            <h2 id="workbench-title">模块实验台</h2>
+          </div>
+          <div class="case-version" id="case-version">v—</div>
+        </div>
+
+        <div class="workbench-layout">
+          <aside class="case-brief">
+            <span class="case-index" id="case-index">M-01</span>
+            <p class="course-label" id="case-course">课程</p>
+            <h3 id="case-name">模块名称</h3>
+            <p id="case-description">模块说明</p>
+            <div class="dataset-list">
+              <span>输出数据集</span>
+              <div id="case-datasets"></div>
+            </div>
+          </aside>
+
+          <div class="execution-panel">
+            <form id="case-form">
+              <div class="panel-title-row">
+                <div>
+                  <span class="step-number">01</span>
+                  <h3>设置实验输入</h3>
+                </div>
+                <span class="schema-note">由 JSON Schema 自动生成</span>
+              </div>
+              <div class="dynamic-fields" id="dynamic-fields"></div>
+              <button class="run-button" id="run-case" type="submit">
+                <span>运行模块</span>
+                <span class="run-icon">→</span>
+              </button>
+            </form>
+          </div>
+        </div>
+
+        <section class="result-panel is-hidden" id="result-panel" aria-labelledby="result-title">
+          <div class="result-toolbar">
+            <div>
+              <span class="step-number">02</span>
+              <h3 id="result-title">运行结果</h3>
+            </div>
+            <div class="result-actions">
+              <span id="request-id"></span>
+              <a class="download-button" id="download-csv" href="#">下载 CSV</a>
+            </div>
+          </div>
+          <div class="result-summary" id="result-summary"></div>
+          <div class="metric-grid" id="metric-grid"></div>
+          <div class="dataset-results" id="dataset-results"></div>
+          <div class="diagnostic-list" id="diagnostic-list"></div>
+          <details class="raw-result">
+            <summary>查看原始 JSON</summary>
+            <pre id="raw-json"></pre>
+          </details>
+        </section>
+      </section>
+
+      <section class="empty-error is-hidden" id="global-error" role="alert">
+        <span>!</span>
+        <div>
+          <strong>暂时无法读取模块</strong>
+          <p id="global-error-message"></p>
+        </div>
+        <button type="button" id="retry-load">重试</button>
+      </section>
+    </main>
+
+    <footer>
+      <div class="footer-mark">知行</div>
+      <p>AI 助教原型系统 · 模块化教学实验底座</p>
+      <p>JSON / CSV STANDARD INTERFACE</p>
+    </footer>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <script src="/assets/app.js" defer></script>
+  </body>
+</html>
