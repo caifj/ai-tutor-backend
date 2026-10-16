@@ -107,7 +107,9 @@ async function apiRequest(path, options = {}) {
 function setConnectionStatus(mode, text) {
   elements.connectionStatus.classList.remove("online", "offline");
   elements.connectionStatus.classList.add(mode);
-  elements.connectionStatus.querySelector("span:last-child").textContent = text;
+  const description = `${text}，点击重新检查`;
+  elements.connectionStatus.title = description;
+  elements.connectionStatus.setAttribute("aria-label", description);
 }
 
 async function checkHealth() {

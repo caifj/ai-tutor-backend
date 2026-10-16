@@ -23,9 +23,14 @@
       </a>
 
       <nav class="top-actions" aria-label="快捷入口">
-        <button class="status-pill" id="connection-status" type="button" title="刷新连接状态">
-          <span class="status-dot"></span>
-          <span>系统检查中</span>
+        <button
+          class="status-pill"
+          id="connection-status"
+          type="button"
+          title="正在检查服务状态，点击重新检查"
+          aria-label="正在检查服务状态，点击重新检查"
+        >
+          <span class="status-dot" aria-hidden="true"></span>
         </button>
       </nav>
     </header>
