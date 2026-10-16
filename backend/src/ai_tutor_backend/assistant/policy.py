@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from ai_tutor_backend.models import CaseDescriptor
+from ai_tutor_backend.models import CaseDescriptor, ExecutionResult
 
 BASE_BEHAVIOR_POLICY = """
 你是“知行课程助手”，面向学生提供学习引导。你必须始终遵守以下规则：
@@ -32,6 +32,41 @@ def build_system_prompt(case: CaseDescriptor | None = None) -> str:
 def build_module_introduction_prompt(case: CaseDescriptor) -> str:
     return (
         f"学生刚刚选择了“{case.name}”模块。请主动介绍这个模块："
-        "用简洁的分点说明学习目标、4—6 个核心知识点、建议的实践顺序和常见误区；"
-        "不要给出可直接提交的完整实现。最后提出一个用于了解学生基础的简短问题。"
+        "用一段不超过100个中文字符的精炼文字，概括学习目标、核心知识点和一个实践提示；"
+        "不要分点，不要给出可直接提交的完整实现，也不要添加开场白。"
+    )
+
+
+def build_code_review_prompt(result: ExecutionResult) -> str:
+    issue_dataset = next(
+        (dataset for dataset in result.payload.datasets if dataset.name == "code_issues"),
+        None,
+    )
+    issues: list[str] = []
+    for row in (issue_dataset.rows if issue_dataset else [])[:6]:
+        message = str(row.get("message", "")).strip()
+        suggestion = str(row.get("suggestion", "")).strip()
+        if message or suggestion:
+            issues.append(f"{message}；建议：{suggestion}")
+    issue_text = " | ".join(issues) or "未发现明确代码问题"
+    metrics = "，".join(
+        f"{key}={value}"
+        for key, value in result.payload.metrics.items()
+        if key
+        in {
+            "overall_score",
+            "test_pass_rate",
+            "functionality_score",
+            "pep8_score",
+            "modularity_score",
+            "similarity_score",
+            "similarity_penalty",
+        }
+    )
+    return (
+        "请根据以下代码评测结果写一段面向学生的AI点评。严格控制在100个中文字符以内，"
+        "先肯定一个具体优点，再指出最优先改进的一点并给出可执行提示；不要分点，不要输出完整代码。\n"
+        f"评测摘要：{result.payload.summary}\n"
+        f"核心指标：{metrics or '暂无'}\n"
+        f"问题与建议：{issue_text}"
     )

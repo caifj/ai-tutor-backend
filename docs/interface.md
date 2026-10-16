@@ -43,6 +43,11 @@
 单元格值；前端依据 `columns.data_type` 选择渲染组件。图片、文件等大对象放在
 `artifacts` 中并返回 URI，不直接塞入 JSON。
 
+提交包含 `source_code` 时，底座会按 `case_id` 与不同学生的历史源码进行相似度审查。
+浏览器前端通过 `metadata.student_id` 传递匿名学生标识；超过阈值后，结果的 `metrics`
+会包含相似度、查重范围、原始分数和扣分后分数，`diagnostics` 会包含
+`CODE_SIMILARITY_HIGH`。详细规则见 [code-similarity.md](code-similarity.md)。
+
 ## CSV 结果格式
 
 CSV 采用稳定长表，而不是让不同案例各自定义表头：

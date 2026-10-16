@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 name = "ai-tutor-backend"
 version = "0.1.0"
 description = "Case-agnostic backend foundation for an AI teaching assistant"
-readme = "docs/README.md"
+readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
   "fastapi>=0.115,<1.0",

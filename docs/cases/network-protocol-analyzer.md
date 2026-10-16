@@ -17,7 +17,7 @@
 核心文件：
 
 ```text
-cases/case_03_network_protocol_analyzer/
+backend/cases/case_03_network_protocol_analyzer/
   code_grader.py  案例描述、输入校验与标准化输出
   evaluator.py    AST 功能检查、质量评分与问题定位
 ```
@@ -31,7 +31,7 @@ cases/case_03_network_protocol_analyzer/
 5. 再次提交后，可在“本机提交时间线”选择历史版本并查看逐行差异。
 
 页面不会提供源码文本框或协议参数表单，文件扩展名和大小会在浏览器与后端两端校验。
-可直接使用仓库中的 `cases/case_03_submission.py` 验证完整流程。
+可直接使用仓库中的 `backend/cases/case_03_submission.py` 验证完整流程。
 
 ## HTTP 请求
 
@@ -48,7 +48,12 @@ cases/case_03_network_protocol_analyzer/
 ```
 
 `source_code` 最大 500,000 字符；`filename` 必须以 `.py` 结尾。接口保持 JSON/CSV 标准输出，
+源码会按本案例单独保存在后端并参与后续学生提交的相似度审查；超过默认 85% 阈值时会
+扣减总分。完整规则见 [../code-similarity.md](../code-similarity.md)。
 其中 CSV 通过结果下载入口生成。
+
+评测结果页面会在“问题与改进建议”区域异步生成一段 AI 点评，最多 100 个字符。点评只向
+模型发送结构化评分与问题摘要，不发送学生源码；模型不可用时不影响静态评测结果。
 
 ## 评分组成
 

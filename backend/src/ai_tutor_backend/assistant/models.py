@@ -38,10 +38,14 @@ class ModuleIntroductionRequest(AssistantModel):
     )
 
 
+class CodeReviewRequest(AssistantModel):
+    request_id: str = Field(min_length=1, max_length=100)
+
+
 class AssistantReply(AssistantModel):
     reply: str
     model: str
-    kind: Literal["chat", "module_introduction"]
+    kind: Literal["chat", "module_introduction", "code_review"]
     case_id: str | None = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 

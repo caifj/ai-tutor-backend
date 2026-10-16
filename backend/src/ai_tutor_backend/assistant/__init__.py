@@ -6,6 +6,7 @@ from .models import (
     AssistantMessage,
     AssistantReply,
     AssistantStatus,
+    CodeReviewRequest,
     ModuleIntroductionRequest,
 )
 from .service import AssistantService
@@ -18,6 +19,7 @@ __all__ = [
     "AssistantService",
     "AssistantStatus",
     "AssistantUnavailableError",
+    "CodeReviewRequest",
     "ModuleIntroductionRequest",
     "SparkChatClient",
 ]

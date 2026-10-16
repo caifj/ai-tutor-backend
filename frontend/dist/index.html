@@ -85,16 +85,9 @@
         </div>
 
         <div class="assistant-shell">
-          <aside class="assistant-guide">
+          <div class="assistant-guide" aria-hidden="true">
             <span class="assistant-guide-mark" aria-hidden="true">问</span>
-            <h3>从问题出发，<br />把知识学明白。</h3>
-            <p>选择课程项目后，助手会自动梳理该模块的目标、知识点、实践顺序和常见误区。</p>
-            <ul>
-              <li>只讨论课程与学习相关问题</li>
-              <li>通过思路、提示与追问帮助理解</li>
-              <li>不会直接代写可提交的完整答案</li>
-            </ul>
-          </aside>
+          </div>
 
           <div class="assistant-chat-card">
             <div class="assistant-toolbar">
@@ -155,6 +148,22 @@
             <div class="skeleton line-long"></div>
             <div class="skeleton block"></div>
           </article>
+        </div>
+      </section>
+
+      <section
+        class="module-introduction is-hidden"
+        id="module-introduction"
+        aria-labelledby="module-introduction-title"
+        aria-live="polite"
+      >
+        <div class="module-introduction-label">
+          <span>AI KNOWLEDGE GUIDE</span>
+          <strong id="module-introduction-title">模块知识导览</strong>
+        </div>
+        <div class="module-introduction-copy">
+          <small id="module-introduction-name">当前模块</small>
+          <p id="module-introduction-content">正在整理模块知识点……</p>
         </div>
       </section>
 
@@ -254,6 +263,7 @@
     </footer>
 
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <script src="/config.js"></script>
     <script src="/assets/app.js" defer></script>
   </body>
 </html>

@@ -99,3 +99,8 @@ def test_frontend_is_served_from_root() -> None:
     assert response.status_code == 200
     assert "知行实验室" in response.text
     assert "/assets/app.js" in response.text
+    assert (
+        response.text.index('id="module-catalog"')
+        < response.text.index('id="module-introduction"')
+        < response.text.index('id="workbench"')
+    )

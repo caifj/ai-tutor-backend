@@ -6,6 +6,7 @@ from pathlib import Path
 from fastapi import FastAPI, Query, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
@@ -16,6 +17,7 @@ from .assistant import (
     AssistantService,
     AssistantStatus,
     AssistantUnavailableError,
+    CodeReviewRequest,
     ModuleIntroductionRequest,
 )
 from .csv_export import execution_to_csv, grade_to_csv
@@ -54,8 +56,27 @@ def create_app(
         version="0.1.0",
         description="案例无关的 AI 助教标准化执行、结果读取、校对与错误讲解底座",
     )
+    cors_origins = [
+        origin.strip()
+        for origin in os.getenv(
+            "AI_TUTOR_CORS_ORIGINS",
+            "http://127.0.0.1:5500,http://localhost:5500",
+        ).split(",")
+        if origin.strip()
+    ]
+    if cors_origins:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=cors_origins,
+            allow_credentials=False,
+            allow_methods=["GET", "POST", "OPTIONS"],
+            allow_headers=["Content-Type"],
+        )
     app.state.registry = registry or CaseRegistry()
-    default_db = Path(os.getenv("AI_TUTOR_DB_PATH", "var/ai_tutor.db"))
+    backend_directory = Path(__file__).resolve().parents[2]
+    default_db = Path(
+        os.getenv("AI_TUTOR_DB_PATH", str(backend_directory / "var" / "ai_tutor.db"))
+    )
     app.state.repository = repository or SQLiteResultRepository(default_db)
     app.state.execution_service = ExecutionService(app.state.registry, app.state.repository)
     app.state.assistant_service = assistant_service or AssistantService()
@@ -176,6 +197,16 @@ def create_app(
         case = app.state.registry.get(body.case_id).descriptor
         return await app.state.assistant_service.introduce(case)
 
+    @app.post(
+        "/api/v1/assistant/code-review",
+        response_model=AssistantReply,
+        tags=["assistant"],
+    )
+    async def assistant_code_review(body: CodeReviewRequest) -> AssistantReply:
+        result = app.state.repository.get(body.request_id)
+        case = app.state.registry.get(result.case_id).descriptor
+        return await app.state.assistant_service.review_code(result, case)
+
     @app.post("/api/v1/executions", response_model=ExecutionResult, tags=["execution"])
     async def execute_case(
         body: ExecutionRequest,
@@ -212,8 +243,19 @@ def create_app(
             return _csv_response(grade_to_csv(report), f"grade-{report.grade_id}.csv")
         return report
 
-    frontend_directory = Path(__file__).resolve().parents[2] / "frontend" / "dist"
-    if frontend_directory.is_dir():
+    project_directory = backend_directory.parent
+    frontend_directory = Path(
+        os.getenv(
+            "AI_TUTOR_FRONTEND_DIR",
+            str(project_directory / "frontend" / "dist"),
+        )
+    )
+    serve_frontend = os.getenv("AI_TUTOR_SERVE_FRONTEND", "1").lower() not in {
+        "0",
+        "false",
+        "no",
+    }
+    if serve_frontend and frontend_directory.is_dir():
         app.mount("/", StaticFiles(directory=frontend_directory, html=True), name="frontend")
 
     return app

@@ -7,6 +7,8 @@ const state = {
   assistantMessages: [],
   assistantCaseId: null,
   assistantBusy: false,
+  moduleIntroductionRequest: 0,
+  codeReviewRequest: 0,
 };
 
 const CODE_GRADER_CASE_ID = "network.protocol-analyzer";
@@ -14,6 +16,27 @@ const HISTORY_DB_NAME = "ai-tutor-lab";
 const HISTORY_STORE_NAME = "submissions";
 const ASSISTANT_STORE_NAME = "assistant_chat";
 const ASSISTANT_CONTEXT_KEY = "course-assistant-main";
+const STUDENT_ID_STORAGE_KEY = "ai-tutor-student-id";
+
+function getOrCreateStudentId() {
+  try {
+    const existing = window.localStorage.getItem(STUDENT_ID_STORAGE_KEY);
+    if (existing) return existing;
+    const generated = window.crypto?.randomUUID?.() || `student-${Date.now()}-${Math.random()}`;
+    window.localStorage.setItem(STUDENT_ID_STORAGE_KEY, generated);
+    return generated;
+  } catch {
+    return `student-session-${Date.now()}-${Math.random()}`;
+  }
+}
+
+const studentId = getOrCreateStudentId();
+
+const API_BASE_URL = String(window.AI_TUTOR_API_BASE_URL || "").replace(/\/$/, "");
+
+function apiUrl(path) {
+  return `${API_BASE_URL}${path}`;
+}
 
 const elements = {
   connectionStatus: document.querySelector("#connection-status"),
@@ -37,6 +60,9 @@ const elements = {
   assistantStatus: document.querySelector("#assistant-model-status"),
   assistantContext: document.querySelector("#assistant-context"),
   clearAssistantChat: document.querySelector("#clear-assistant-chat"),
+  moduleIntroduction: document.querySelector("#module-introduction"),
+  moduleIntroductionName: document.querySelector("#module-introduction-name"),
+  moduleIntroductionContent: document.querySelector("#module-introduction-content"),
 };
 
 function escapeHtml(value) {
@@ -63,7 +89,7 @@ function showToast(message) {
 }
 
 async function apiRequest(path, options = {}) {
-  const response = await fetch(path, {
+  const response = await fetch(apiUrl(path), {
     headers: { "Content-Type": "application/json", ...(options.headers || {}) },
     ...options,
   });
@@ -194,7 +220,9 @@ function selectCase(caseId, shouldScroll = true) {
   elements.workbench.classList.remove("is-hidden");
   window.history.replaceState(null, "", `#case=${encodeURIComponent(caseId)}`);
   introduceSelectedModule(selected);
-  if (shouldScroll) elements.workbench.scrollIntoView({ behavior: "smooth", block: "start" });
+  if (shouldScroll) {
+    elements.moduleIntroduction.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
 }
 
 function renderInputForm(schema) {
@@ -409,7 +437,11 @@ async function executeSelectedCase(event) {
   try {
     const result = await apiRequest("/api/v1/executions", {
       method: "POST",
-      body: JSON.stringify({ case_id: state.selectedCase.case_id, input }),
+      body: JSON.stringify({
+        case_id: state.selectedCase.case_id,
+        input,
+        metadata: { student_id: studentId },
+      }),
     });
     state.latestResult = result;
     renderResult(result);
@@ -431,7 +463,7 @@ async function executeSelectedCase(event) {
 function renderResult(result) {
   const payload = result.payload || {};
   document.querySelector("#download-csv").href =
-    `/api/v1/results/${encodeURIComponent(result.request_id)}?format=csv`;
+    apiUrl(`/api/v1/results/${encodeURIComponent(result.request_id)}?format=csv`);
   document.querySelector("#result-summary").textContent = payload.summary || "执行完成";
 
   const metrics = result.case_id === CODE_GRADER_CASE_ID
@@ -452,6 +484,9 @@ function renderResult(result) {
     result.case_id === CODE_GRADER_CASE_ID
       ? renderCodeEvaluation(payload)
       : (payload.datasets || []).map(renderDataset).join("");
+  if (result.case_id === CODE_GRADER_CASE_ID) {
+    loadAiCodeReview(result.request_id);
+  }
   document.querySelector("#diagnostic-list").innerHTML = (payload.diagnostics || [])
     .map(
       (item) => `<div class="diagnostic-item ${escapeHtml(item.level)}">
@@ -466,7 +501,7 @@ function renderResult(result) {
 }
 
 function studentMetrics(metrics) {
-  return [
+  const items = [
     ["项目总分", `${metrics.overall_score ?? 0} / 100`],
     ["功能通过率", `${metrics.test_pass_rate ?? 0}%`],
     ["已通过检查", `${metrics.tests_passed ?? 0} / ${metrics.tests_total ?? 0}`],
@@ -474,16 +509,28 @@ function studentMetrics(metrics) {
     ["代码规范", `${metrics.pep8_score ?? 0} / 10`],
     ["模块化程度", `${metrics.modularity_score ?? 0} / 10`],
   ];
+  if (metrics.similarity_checked_submissions !== undefined) {
+    items.push(
+      ["同案例查重范围", `${metrics.similarity_checked_submissions} 份历史代码`],
+      ["最高代码相似度", `${metrics.similarity_score ?? 0}%`],
+      ["查重扣分", `-${metrics.similarity_penalty ?? 0}`],
+    );
+  }
+  return items;
 }
 
-function renderDataset(dataset) {
+function renderDataset(dataset, options = {}) {
   const columns = dataset.columns || [];
   const rows = dataset.rows || [];
   return `<section class="dataset-block">
-    <div class="dataset-title">
-      <h4>${escapeHtml(dataset.title)}</h4>
-      <span>${escapeHtml(dataset.name)} · ${rows.length} ROWS</span>
-    </div>
+    ${
+      options.hideTitle
+        ? ""
+        : `<div class="dataset-title">
+            <h4>${escapeHtml(dataset.title)}</h4>
+            <span>${escapeHtml(dataset.name)} · ${rows.length} ROWS</span>
+          </div>`
+    }
     <div class="table-scroll">
       <table class="result-table">
         <thead><tr>${columns
@@ -564,9 +611,8 @@ function renderCodeEvaluation(payload) {
 
 function renderStudentIssues(dataset) {
   const severityLabels = { error: "错误", warning: "注意", style: "规范", quality: "质量" };
-  return renderDataset({
+  const studentDataset = {
     ...dataset,
-    title: "问题与改进建议",
     columns: (dataset.columns || []).filter((column) => column.key !== "code"),
     rows: (dataset.rows || [])
       .filter((row) => row.code !== "DUP001")
@@ -576,7 +622,39 @@ function renderStudentIssues(dataset) {
         message: row.message,
         suggestion: row.suggestion,
       })),
-  });
+  };
+  return `<section class="evaluation-section student-issues-section">
+    <div class="dataset-title">
+      <h4>问题与改进建议</h4>
+      <span>${studentDataset.rows.length} 项待查看</span>
+    </div>
+    <div class="ai-code-review is-loading" id="ai-code-review">
+      <span>AI 点评</span>
+      <p>正在结合本次评测结果整理建议……</p>
+    </div>
+    ${renderDataset(studentDataset, { hideTitle: true })}
+  </section>`;
+}
+
+async function loadAiCodeReview(requestId) {
+  state.codeReviewRequest += 1;
+  const reviewRequest = state.codeReviewRequest;
+  const container = document.querySelector("#ai-code-review");
+  if (!container) return;
+  try {
+    const response = await apiRequest("/api/v1/assistant/code-review", {
+      method: "POST",
+      body: JSON.stringify({ request_id: requestId }),
+    });
+    if (reviewRequest !== state.codeReviewRequest) return;
+    container.querySelector("p").textContent = response.reply;
+    container.classList.remove("is-loading", "is-unavailable");
+  } catch (error) {
+    if (reviewRequest !== state.codeReviewRequest) return;
+    container.querySelector("p").textContent = `AI 点评暂不可用：${error.message}`;
+    container.classList.remove("is-loading");
+    container.classList.add("is-unavailable");
+  }
 }
 
 function openHistoryDb() {
@@ -757,23 +835,25 @@ async function askAssistant(question) {
 
 async function introduceSelectedModule(selected) {
   elements.assistantContext.textContent = `正在学习 · ${selected.name}`;
-  if (state.assistantBusy || state.assistantCaseId === selected.case_id) return;
   state.assistantCaseId = selected.case_id;
-  setAssistantBusy(true);
+  state.moduleIntroductionRequest += 1;
+  const requestId = state.moduleIntroductionRequest;
+  elements.moduleIntroductionName.textContent = selected.name;
+  elements.moduleIntroductionContent.textContent = "AI 正在整理这个模块的核心知识点……";
+  elements.moduleIntroduction.classList.remove("is-hidden");
+  saveAssistantContext().catch(() => {});
   try {
     const response = await apiRequest("/api/v1/assistant/module-introduction", {
       method: "POST",
       body: JSON.stringify({ case_id: selected.case_id }),
     });
-    state.assistantMessages.push({ role: "assistant", content: response.reply });
+    if (requestId !== state.moduleIntroductionRequest) return;
+    elements.moduleIntroductionContent.textContent = response.reply;
     setAssistantStatus("online", "课程助手在线");
-    await saveAssistantContext();
   } catch (error) {
-    state.assistantCaseId = null;
+    if (requestId !== state.moduleIntroductionRequest) return;
+    elements.moduleIntroductionContent.textContent = `知识导览暂未生成：${error.message}`;
     setAssistantStatus("offline", "课程助手暂不可用");
-    showToast(`模块介绍暂未生成：${error.message}`);
-  } finally {
-    setAssistantBusy(false);
   }
 }
 

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import sqlite3
+from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from threading import RLock
 
@@ -9,6 +11,16 @@ from .models import ExecutionResult
 
 class ResultNotFoundError(KeyError):
     pass
+
+
+@dataclass(frozen=True, slots=True)
+class StoredCodeSubmission:
+    request_id: str
+    case_id: str
+    student_id: str | None
+    filename: str
+    source_code: str
+    created_at: str
 
 
 class SQLiteResultRepository:
@@ -30,6 +42,24 @@ class SQLiteResultRepository:
                 created_at TEXT NOT NULL,
                 document TEXT NOT NULL
             )
+            """
+        )
+        self._connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS code_submissions (
+                request_id TEXT PRIMARY KEY,
+                case_id TEXT NOT NULL,
+                student_id TEXT,
+                filename TEXT NOT NULL,
+                source_code TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            )
+            """
+        )
+        self._connection.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_code_submissions_case
+            ON code_submissions(case_id, created_at)
             """
         )
         self._connection.commit()
@@ -64,6 +94,52 @@ class SQLiteResultRepository:
         if row is None:
             raise ResultNotFoundError(request_id)
         return ExecutionResult.model_validate_json(row[0])
+
+    def save_code_submission(
+        self,
+        *,
+        request_id: str,
+        case_id: str,
+        student_id: str | None,
+        filename: str,
+        source_code: str,
+    ) -> None:
+        with self._lock, self._connection:
+            self._connection.execute(
+                """
+                INSERT INTO code_submissions(
+                    request_id, case_id, student_id, filename, source_code, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(request_id) DO NOTHING
+                """,
+                (
+                    request_id,
+                    case_id,
+                    student_id,
+                    filename,
+                    source_code,
+                    datetime.now(UTC).isoformat(),
+                ),
+            )
+
+    def list_code_submissions(
+        self,
+        case_id: str,
+        *,
+        excluding_student_id: str | None = None,
+    ) -> list[StoredCodeSubmission]:
+        query = (
+            "SELECT request_id, case_id, student_id, filename, source_code, created_at "
+            "FROM code_submissions WHERE case_id = ?"
+        )
+        parameters: list[str] = [case_id]
+        if excluding_student_id:
+            query += " AND (student_id IS NULL OR student_id <> ?)"
+            parameters.append(excluding_student_id)
+        query += " ORDER BY created_at ASC"
+        with self._lock:
+            rows = self._connection.execute(query, parameters).fetchall()
+        return [StoredCodeSubmission(*row) for row in rows]
 
     def close(self) -> None:
         with self._lock:

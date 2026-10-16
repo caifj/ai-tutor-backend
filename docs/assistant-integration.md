@@ -2,7 +2,7 @@
 
 ## 目标与边界
 
-AI 课程助手独立位于 `src/ai_tutor_backend/assistant/`，案例适配器不依赖模型 SDK，
+AI 课程助手独立位于 `backend/src/ai_tutor_backend/assistant/`，案例适配器不依赖模型 SDK，
 模型模块也不执行任何案例代码。模块只通过 `CaseDescriptor` 读取已选项目的名称、课程、
 简介和评测内容，从而生成当前学习上下文。
 
@@ -24,7 +24,7 @@ $env:SPARK_MODEL = "spark-x2.5-1.7b"
 uvicorn ai_tutor_backend.main:app --reload
 ```
 
-可选变量见项目根目录 `.env.example`：
+可选变量见 `backend/.env.example`：
 
 | 变量 | 用途 | 默认值 |
 | --- | --- | --- |
@@ -65,8 +65,21 @@ uvicorn ai_tutor_backend.main:app --reload
 {"case_id": "network.protocol-analyzer"}
 ```
 
-页面选择不同模块后自动调用。介绍包含学习目标、核心知识点、实践顺序、常见误区和一个
-了解学生基础的问题，不生成可直接提交的完整实现。
+页面选择不同模块后自动调用，结果显示在“项目代码评测”和“项目评测区”之间，不写入
+聊天记录。介绍概括学习目标、核心知识点和实践提示；服务端会规范空白并强制限制在
+100 个字符以内，不生成可直接提交的完整实现。
+
+### 评测结果 AI 点评
+
+`POST /api/v1/assistant/code-review`
+
+```json
+{"request_id": "已完成评测的请求 ID"}
+```
+
+后端按 `request_id` 读取已保存的结构化评测结果，用摘要、评分指标、诊断以及
+`code_issues` 问题清单生成点评。学生源码不会发送给模型。点评显示在“问题与改进建议”
+区域，要求先肯定一个具体优点，再指出一个优先改进点；服务端强制限制在 100 个字符内。
 
 ## 行为规范
 
@@ -96,7 +109,7 @@ API Key 永远不进入浏览器缓存，浏览器只调用同源后端接口。
 ## 目录职责
 
 ```text
-src/ai_tutor_backend/assistant/
+backend/src/ai_tutor_backend/assistant/
   client.py    Spark HTTP 客户端与环境配置
   models.py    问答请求、响应和状态模型
   policy.py    学习范围、引导式回答与模块上下文规则

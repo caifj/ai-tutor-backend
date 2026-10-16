@@ -17,7 +17,7 @@
 ## 二、建议目录
 
 ```text
-cases/case_nn_my_case/
+backend/cases/case_nn_my_case/
   __init__.py       # register_cases 注册入口
   adapter.py        # CaseAdapter 实现
   algorithm.py      # 案例自身算法，可继续拆分
@@ -27,7 +27,7 @@ cases/case_nn_my_case/
 仓库内的完整可运行示例位于：
 
 ```text
-cases/examples/demo_case_package/
+backend/cases/examples/demo_case_package/
   __init__.py
   echo_case.py
 ```
@@ -123,10 +123,10 @@ class MyCase(CaseAdapter):
 
 ## 五、注册案例
 
-案例包在 `cases/` 中使用独立目录，并由 `cases/__init__.py` 的统一注册函数加载：
+案例包在 `backend/cases/` 中使用独立目录，并由 `backend/cases/__init__.py` 的统一注册函数加载：
 
 ```python
-# cases/__init__.py
+# backend/cases/__init__.py
 def register_cases(registry):
     registry.register(MyCase())
 ```
