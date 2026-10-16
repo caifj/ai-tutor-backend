@@ -50,7 +50,7 @@ class NetworkProtocolAnalyzerCase(CaseAdapter):
             name="网络协议分析仪代码评测",
             course="计算机网络",
             description=(
-                "提交一个 Python 文件，静态检查其是否实现 ARP、ICMP、TCP 报文构造与解析、"
+                "提交一个 Python 文件，逐项检查其是否实现 ARP、ICMP、TCP 报文构造与解析、"
                 "流量捕获和扫描行为识别，并给出代码质量评分。"
             ),
             version="2.0.0",
@@ -88,7 +88,6 @@ class NetworkProtocolAnalyzerCase(CaseAdapter):
                 "functionality_score": round(report.functionality_score, 1),
                 "pep8_score": round(report.pep8_score, 1),
                 "modularity_score": round(report.modularity_score, 1),
-                "duplication_score": round(report.duplication_score, 1),
                 "overall_score": round(report.overall_score, 1),
             },
             diagnostics=diagnostics,
@@ -121,7 +120,7 @@ class NetworkProtocolAnalyzerCase(CaseAdapter):
             Diagnostic(
                 code="STATIC_ANALYSIS_ONLY",
                 level=DiagnosticLevel.INFO,
-                message="本次结果来自 AST 与代码结构规则分析，未执行上传代码或发起真实抓包。",
+                message="为确保安全，本次评测不会运行上传代码或发起真实抓包。",
             )
         ]
         risky = [issue for issue in report.issues if issue["severity"] == "warning"]

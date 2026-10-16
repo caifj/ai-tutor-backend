@@ -1,9 +1,7 @@
 from __future__ import annotations
 
 import ast
-import io
 import re
-import tokenize
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -64,17 +62,12 @@ class EvaluationReport:
         return self.quality_score("模块化程度")
 
     @property
-    def duplication_score(self) -> float:
-        return self.quality_score("重复代码")
-
-    @property
     def overall_score(self) -> float:
         return min(
             100.0,
             self.functionality_score
             + self.pep8_score
-            + self.modularity_score
-            + self.duplication_score,
+            + self.modularity_score,
         )
 
 
@@ -212,7 +205,7 @@ def _feature_checks(facts: SourceFacts) -> list[dict[str, Any]]:
         (
             "BUILD_ARP",
             "构造 ARP 报文",
-            8.0,
+            9.0,
             bool(build_arp) and (scapy or raw_build),
             _evidence(build_arp, "检测到 ARP 构造函数", "未定位到完整的 ARP 构造逻辑"),
             "提供包含 ARP 字段赋值的构造函数，并使用 Scapy 或 struct.pack。",
@@ -220,7 +213,7 @@ def _feature_checks(facts: SourceFacts) -> list[dict[str, Any]]:
         (
             "BUILD_ICMP",
             "构造 ICMP 报文",
-            8.0,
+            9.0,
             bool(build_icmp) and (scapy or raw_build),
             _evidence(build_icmp, "检测到 ICMP 构造函数", "未定位到完整的 ICMP 构造逻辑"),
             "实现 ICMP 报文构造；原始字节实现应包含校验和处理。",
@@ -228,7 +221,7 @@ def _feature_checks(facts: SourceFacts) -> list[dict[str, Any]]:
         (
             "BUILD_TCP",
             "构造 TCP 报文",
-            8.0,
+            9.0,
             bool(build_tcp) and (scapy or raw_build),
             _evidence(build_tcp, "检测到 TCP 构造函数", "未定位到完整的 TCP 构造逻辑"),
             "实现 TCP 首部、标志位与校验和，或正确组合 Scapy TCP 层。",
@@ -236,7 +229,7 @@ def _feature_checks(facts: SourceFacts) -> list[dict[str, Any]]:
         (
             "CAPTURE_PACKETS",
             "捕获网络报文",
-            10.0,
+            12.0,
             bool(capture_calls),
             f"捕获调用：{', '.join(capture_calls[:4])}" if capture_calls else "未发现抓包 API 调用",
             "使用 scapy.sniff、socket.recvfrom 或等价抓包库，并限制数量和超时。",
@@ -244,7 +237,7 @@ def _feature_checks(facts: SourceFacts) -> list[dict[str, Any]]:
         (
             "PARSE_ARP",
             "解析 ARP 报文",
-            7.0,
+            8.0,
             bool(parse_arp) and (scapy or raw_parse),
             _evidence(parse_arp, "检测到 ARP 解析函数", "未定位到完整的 ARP 解析逻辑"),
             "为 ARP 字段提取提供独立 parse/decode/analyze 函数。",
@@ -252,7 +245,7 @@ def _feature_checks(facts: SourceFacts) -> list[dict[str, Any]]:
         (
             "PARSE_ICMP",
             "解析 ICMP 报文",
-            7.0,
+            8.0,
             bool(parse_icmp) and (scapy or raw_parse),
             _evidence(parse_icmp, "检测到 ICMP 解析函数", "未定位到完整的 ICMP 解析逻辑"),
             "提取 ICMP 类型、代码、标识符等关键字段。",
@@ -260,7 +253,7 @@ def _feature_checks(facts: SourceFacts) -> list[dict[str, Any]]:
         (
             "PARSE_TCP",
             "解析 TCP 报文",
-            7.0,
+            8.0,
             bool(parse_tcp) and (scapy or raw_parse),
             _evidence(parse_tcp, "检测到 TCP 解析函数", "未定位到完整的 TCP 解析逻辑"),
             "提取端口、序列号和 TCP flags，并覆盖异常标志组合。",
@@ -268,7 +261,7 @@ def _feature_checks(facts: SourceFacts) -> list[dict[str, Any]]:
         (
             "DETECT_SCAN",
             "识别扫描等异常流量",
-            10.0,
+            12.0,
             bool(scan_functions) and has_threshold and bool(facts.containers & {"dict", "set"}),
             (
                 f"检测函数：{', '.join(scan_functions[:4])}；存在计数/阈值结构"
@@ -426,43 +419,6 @@ def _modularity_quality(facts: SourceFacts) -> tuple[dict[str, Any], list[dict[s
     return _quality_row("模块化程度", score, summary, details), issues
 
 
-def _duplication_quality(source: str) -> tuple[dict[str, Any], list[dict[str, Any]]]:
-    ignored_lines: set[int] = set()
-    try:
-        tokens = tokenize.generate_tokens(io.StringIO(source).readline)
-        ignored_lines = {
-            token.start[0] for token in tokens if token.type in {tokenize.COMMENT, tokenize.STRING}
-        }
-    except (tokenize.TokenError, IndentationError):
-        pass
-    logical = [
-        (number, " ".join(line.strip().split()))
-        for number, line in enumerate(source.splitlines(), 1)
-        if number not in ignored_lines and len(" ".join(line.strip().split())) >= 8
-    ]
-    windows: dict[tuple[str, ...], list[int]] = {}
-    for index in range(max(0, len(logical) - 3)):
-        block = logical[index : index + 4]
-        if any(block[offset + 1][0] != block[offset][0] + 1 for offset in range(3)):
-            continue
-        windows.setdefault(tuple(item[1] for item in block), []).append(block[0][0])
-    repeated = [lines for lines in windows.values() if len(lines) > 1]
-    score = max(0.0, 10.0 - min(8.0, len(repeated) * 2.0))
-    issues = [
-        _issue(
-            "quality",
-            lines[0],
-            "DUP001",
-            f"发现 4 行重复代码块，起始行：{', '.join(map(str, lines[:5]))}",
-            "提取公共函数，使用参数表达协议间差异。",
-        )
-        for lines in repeated[:5]
-    ]
-    summary = "未发现明显重复" if not repeated else "存在可合并的重复代码"
-    details = f"基于连续 4 个有效代码行比较，发现 {len(repeated)} 组重复片段。"
-    return _quality_row("重复代码", score, summary, details), issues
-
-
 def _security_issues(facts: SourceFacts) -> list[dict[str, Any]]:
     risky = {
         "eval": "eval 会执行动态表达式",
@@ -488,14 +444,14 @@ def _security_issues(facts: SourceFacts) -> list[dict[str, Any]]:
 
 
 CHECK_DEFINITIONS = (
-    ("BUILD_ARP", "构造 ARP 报文", 8.0),
-    ("BUILD_ICMP", "构造 ICMP 报文", 8.0),
-    ("BUILD_TCP", "构造 TCP 报文", 8.0),
-    ("CAPTURE_PACKETS", "捕获网络报文", 10.0),
-    ("PARSE_ARP", "解析 ARP 报文", 7.0),
-    ("PARSE_ICMP", "解析 ICMP 报文", 7.0),
-    ("PARSE_TCP", "解析 TCP 报文", 7.0),
-    ("DETECT_SCAN", "识别扫描等异常流量", 10.0),
+    ("BUILD_ARP", "构造 ARP 报文", 9.0),
+    ("BUILD_ICMP", "构造 ICMP 报文", 9.0),
+    ("BUILD_TCP", "构造 TCP 报文", 9.0),
+    ("CAPTURE_PACKETS", "捕获网络报文", 12.0),
+    ("PARSE_ARP", "解析 ARP 报文", 8.0),
+    ("PARSE_ICMP", "解析 ICMP 报文", 8.0),
+    ("PARSE_TCP", "解析 TCP 报文", 8.0),
+    ("DETECT_SCAN", "识别扫描等异常流量", 12.0),
     ("STRUCTURED_OUTPUT", "输出抓包记录与异常识别结果", 5.0),
 )
 
@@ -523,7 +479,6 @@ def _syntax_failure(exc: SyntaxError) -> EvaluationReport:
     quality = [
         _quality_row("PEP8 规范", 0.0, "无法评分", "语法无效。"),
         _quality_row("模块化程度", 0.0, "无法评分", "语法无效。"),
-        _quality_row("重复代码", 0.0, "无法评分", "语法无效。"),
     ]
     return EvaluationReport(False, checks, quality, [issue])
 
@@ -541,13 +496,9 @@ def evaluate_python_source(source: str) -> EvaluationReport:
     facts = _collect_facts(tree, source)
     pep8, pep8_issues = _pep8_quality(source, tree)
     modularity, modularity_issues = _modularity_quality(facts)
-    duplication, duplication_issues = _duplication_quality(source)
     return EvaluationReport(
         syntax_valid=True,
         functional_checks=_feature_checks(facts),
-        quality_scores=[pep8, modularity, duplication],
-        issues=pep8_issues
-        + modularity_issues
-        + duplication_issues
-        + _security_issues(facts),
+        quality_scores=[pep8, modularity],
+        issues=pep8_issues + modularity_issues + _security_issues(facts),
     )

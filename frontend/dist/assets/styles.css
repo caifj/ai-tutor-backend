@@ -600,7 +600,7 @@ footer {
 
 .workbench-header {
   display: grid;
-  grid-template-columns: auto 1fr auto;
+  grid-template-columns: auto 1fr;
   align-items: start;
   gap: 20px;
   padding-bottom: 42px;
@@ -624,13 +624,6 @@ footer {
 
 .workbench-header .eyebrow {
   margin-bottom: 12px;
-}
-
-.case-version {
-  padding: 5px 9px;
-  color: var(--teal);
-  border: 1px solid var(--teal);
-  font: 800 11px/1 Arial, sans-serif;
 }
 
 .workbench-layout {
@@ -1198,7 +1191,7 @@ footer {
 
 .quality-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: 12px;
 }
 
@@ -1605,10 +1598,6 @@ footer p:last-child {
 
   .workbench-header {
     grid-template-columns: auto 1fr;
-  }
-
-  .case-version {
-    display: none;
   }
 
   .workbench-layout {

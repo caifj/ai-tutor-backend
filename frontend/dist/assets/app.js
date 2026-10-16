@@ -75,9 +75,9 @@ function setConnectionStatus(mode, text) {
 async function checkHealth() {
   try {
     const health = await apiRequest("/health");
-    setConnectionStatus("online", health.status === "ok" ? "后端在线" : "状态未知");
+    setConnectionStatus("online", health.status === "ok" ? "可以提交" : "状态未知");
   } catch {
-    setConnectionStatus("offline", "后端离线");
+    setConnectionStatus("offline", "暂不可用");
   }
 }
 
@@ -92,9 +92,9 @@ async function loadCases() {
   try {
     const response = await apiRequest("/api/v1/cases");
     state.cases = response.items || [];
-    elements.moduleCount.textContent = state.cases.length;
+    if (elements.moduleCount) elements.moduleCount.textContent = state.cases.length;
     renderCases();
-    setConnectionStatus("online", "后端在线");
+    setConnectionStatus("online", "可以提交");
 
     const caseId = new URLSearchParams(window.location.hash.slice(1)).get("case");
     if (caseId && state.cases.some((item) => item.case_id === caseId)) {
@@ -102,11 +102,11 @@ async function loadCases() {
     }
   } catch (error) {
     state.cases = [];
-    elements.moduleCount.textContent = "0";
+    if (elements.moduleCount) elements.moduleCount.textContent = "0";
     elements.moduleGrid.innerHTML = "";
     elements.globalErrorMessage.textContent = error.message;
     elements.globalError.classList.remove("is-hidden");
-    setConnectionStatus("offline", "后端离线");
+    setConnectionStatus("offline", "暂不可用");
   }
 }
 
@@ -114,8 +114,8 @@ function renderCases() {
   if (!state.cases.length) {
     elements.moduleGrid.innerHTML = `
       <div class="empty-catalog">
-        <strong>还没有已注册模块</strong>
-        <p>为案例包添加 register_cases(registry)，重启后端后入口会自动出现。</p>
+        <strong>项目暂未开放</strong>
+        <p>请稍后刷新页面，或联系课程教师。</p>
       </div>`;
     return;
   }
@@ -127,8 +127,8 @@ function renderCases() {
           data-case-id="${escapeHtml(item.case_id)}"
           aria-label="进入${escapeHtml(item.name)}">
           <div class="module-meta">
-            <span>M-${String(index + 1).padStart(2, "0")}</span>
-            <span>V${escapeHtml(item.version)}</span>
+            <span>任务 ${String(index + 1).padStart(2, "0")}</span>
+            <span>${escapeHtml(item.course)}</span>
           </div>
           <h3>${escapeHtml(item.name)}</h3>
           <p>${escapeHtml(item.description || `${item.course}教学实验模块`)}</p>
@@ -156,15 +156,20 @@ function selectCase(caseId, shouldScroll = true) {
   state.uploadedFile = null;
   const index = state.cases.findIndex((item) => item.case_id === caseId) + 1;
 
-  document.querySelector("#case-index").textContent = `M-${String(index).padStart(2, "0")}`;
+  document.querySelector("#case-index").textContent =
+    caseId === CODE_GRADER_CASE_ID ? "项目 03" : `任务 ${String(index).padStart(2, "0")}`;
   document.querySelector("#case-course").textContent = selected.course;
   document.querySelector("#case-name").textContent = selected.name;
   document.querySelector("#case-description").textContent =
     selected.description || "该模块暂未提供详细说明。";
-  document.querySelector("#case-version").textContent = `v${selected.version}`;
+  const datasetLabels = {
+    functional_tests: "功能完成度",
+    quality_scores: "代码质量",
+    code_issues: "问题与建议",
+  };
   document.querySelector("#case-datasets").innerHTML = selected.output_datasets.length
     ? selected.output_datasets
-        .map((name) => `<span class="dataset-chip">${escapeHtml(name)}</span>`)
+        .map((name) => `<span class="dataset-chip">${escapeHtml(datasetLabels[name] || name)}</span>`)
         .join("")
     : '<span class="dataset-chip">动态输出</span>';
 
@@ -181,7 +186,7 @@ function selectCase(caseId, shouldScroll = true) {
 
 function renderInputForm(schema) {
   document.querySelector("#input-panel-title").textContent = "设置实验输入";
-  document.querySelector(".schema-note").textContent = "由 JSON Schema 自动生成";
+  document.querySelector(".schema-note").textContent = "按项目要求填写";
   elements.runCase.querySelector("span:first-child").textContent = "运行模块";
   if (schema["x-ui-mode"] === "python-file") {
     renderPythonFileUploader(schema);
@@ -227,7 +232,7 @@ function renderPythonFileUploader(schema) {
         <summary>预览待评测源码</summary>
         <pre id="source-preview-code"></pre>
       </details>
-      <p class="upload-safety">后端仅做 AST 与结构规则分析，不会 import 或执行上传代码。</p>
+      <p class="upload-safety">代码仅用于项目评测，不会在服务器中运行。</p>
     </div>`;
 
   const input = document.querySelector("#python-file");
@@ -399,7 +404,7 @@ async function executeSelectedCase(event) {
       await saveSubmissionToBrowser(result, input);
       await loadSubmissionHistory();
     }
-    showToast("模块运行完成");
+    showToast("评测完成");
   } catch (error) {
     const firstDetail = error.details?.errors?.[0]?.msg;
     showToast(firstDetail ? `${error.message}：${firstDetail}` : error.message);
@@ -412,14 +417,13 @@ async function executeSelectedCase(event) {
 
 function renderResult(result) {
   const payload = result.payload || {};
-  document.querySelector("#request-id").textContent = result.request_id;
-  document.querySelector("#request-id").title = result.request_id;
   document.querySelector("#download-csv").href =
     `/api/v1/results/${encodeURIComponent(result.request_id)}?format=csv`;
   document.querySelector("#result-summary").textContent = payload.summary || "执行完成";
-  document.querySelector("#raw-json").textContent = JSON.stringify(result, null, 2);
 
-  const metrics = Object.entries(payload.metrics || {});
+  const metrics = result.case_id === CODE_GRADER_CASE_ID
+    ? studentMetrics(payload.metrics || {})
+    : Object.entries(payload.metrics || {});
   document.querySelector("#metric-grid").innerHTML = metrics.length
     ? metrics
         .map(
@@ -438,7 +442,7 @@ function renderResult(result) {
   document.querySelector("#diagnostic-list").innerHTML = (payload.diagnostics || [])
     .map(
       (item) => `<div class="diagnostic-item ${escapeHtml(item.level)}">
-        <span class="diagnostic-code">${escapeHtml(item.code)}</span>
+        ${result.case_id === CODE_GRADER_CASE_ID ? "" : `<span class="diagnostic-code">${escapeHtml(item.code)}</span>`}
         <span>${escapeHtml(item.message)}</span>
       </div>`,
     )
@@ -446,6 +450,17 @@ function renderResult(result) {
 
   elements.resultPanel.classList.remove("is-hidden");
   elements.resultPanel.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function studentMetrics(metrics) {
+  return [
+    ["项目总分", `${metrics.overall_score ?? 0} / 100`],
+    ["功能通过率", `${metrics.test_pass_rate ?? 0}%`],
+    ["已通过检查", `${metrics.tests_passed ?? 0} / ${metrics.tests_total ?? 0}`],
+    ["功能得分", `${metrics.functionality_score ?? 0} / 80`],
+    ["代码规范", `${metrics.pep8_score ?? 0} / 10`],
+    ["模块化程度", `${metrics.modularity_score ?? 0} / 10`],
+  ];
 }
 
 function renderDataset(dataset) {
@@ -490,7 +505,9 @@ function findDataset(payload, name) {
 
 function renderCodeEvaluation(payload) {
   const tests = findDataset(payload, "functional_tests").rows;
-  const quality = findDataset(payload, "quality_scores").rows;
+  const quality = findDataset(payload, "quality_scores").rows.filter(
+    (item) => item.dimension !== "重复代码",
+  );
   const issues = findDataset(payload, "code_issues");
   const testDetails = tests
     .map(
@@ -529,7 +546,24 @@ function renderCodeEvaluation(payload) {
       <div class="dataset-title"><h4>代码质量</h4><span>点击展开评分依据</span></div>
       <div class="quality-grid">${qualityCards}</div>
     </section>
-    ${renderDataset(issues)}`;
+    ${renderStudentIssues(issues)}`;
+}
+
+function renderStudentIssues(dataset) {
+  const severityLabels = { error: "错误", warning: "注意", style: "规范", quality: "质量" };
+  return renderDataset({
+    ...dataset,
+    title: "问题与改进建议",
+    columns: (dataset.columns || []).filter((column) => column.key !== "code"),
+    rows: (dataset.rows || [])
+      .filter((row) => row.code !== "DUP001")
+      .map((row) => ({
+        severity: severityLabels[row.severity] || row.severity,
+        line: row.line,
+        message: row.message,
+        suggestion: row.suggestion,
+      })),
+  });
 }
 
 function openHistoryDb() {
@@ -608,7 +642,7 @@ function renderSubmissionHistory() {
         const time = new Date(item.created_at).toLocaleString("zh-CN", { hour12: false });
         return `<button class="timeline-item" type="button" data-history-id="${escapeHtml(item.id)}">
           <span class="timeline-dot"></span>
-          <span><b>V${state.history.length - index}</b><strong>${escapeHtml(item.filename)}</strong><small>${escapeHtml(time)}</small></span>
+          <span><b>第 ${state.history.length - index} 次提交</b><strong>${escapeHtml(item.filename)}</strong><small>${escapeHtml(time)}</small></span>
           <em>${escapeHtml(metrics.overall_score ?? "—")}<small>总分</small></em>
         </button>`;
       })
@@ -625,7 +659,7 @@ function renderSubmissionHistory() {
 
 function updateDiffSelectors() {
   const options = state.history
-    .map((item, index) => `<option value="${escapeHtml(item.id)}">V${state.history.length - index} · ${escapeHtml(item.filename)}</option>`)
+    .map((item, index) => `<option value="${escapeHtml(item.id)}">第 ${state.history.length - index} 次 · ${escapeHtml(item.filename)}</option>`)
     .join("");
   const from = document.querySelector("#diff-from");
   const to = document.querySelector("#diff-to");
@@ -636,7 +670,7 @@ function updateDiffSelectors() {
     to.value = state.history[0].id;
     renderVersionDiff();
   } else {
-    elements.codeDiff.textContent = "至少提交两个版本后可进行比较。";
+    elements.codeDiff.textContent = "至少提交两次后可进行比较。";
   }
 }
 
@@ -644,7 +678,7 @@ function renderVersionDiff() {
   const oldRecord = state.history.find((item) => item.id === document.querySelector("#diff-from").value);
   const newRecord = state.history.find((item) => item.id === document.querySelector("#diff-to").value);
   if (!oldRecord || !newRecord) {
-    showToast("请选择两个可比较的版本");
+    showToast("请选择两次可比较的提交");
     return;
   }
   const lines = lineDiff(oldRecord.source_code || "", newRecord.source_code || "");

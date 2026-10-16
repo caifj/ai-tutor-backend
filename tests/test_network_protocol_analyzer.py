@@ -91,7 +91,10 @@ def test_complete_submission_passes_core_static_checks() -> None:
     assert result.metrics["syntax_valid"] is True
     assert result.metrics["tests_passed"] == result.metrics["tests_total"]
     assert result.metrics["test_pass_rate"] == 100.0
+    assert result.metrics["functionality_score"] == 80.0
     assert result.metrics["overall_score"] >= 90
+    assert "duplication_score" not in result.metrics
+    assert len(result.datasets[1].rows) == 2
     assert all(row["passed"] for row in checks.values())
 
 

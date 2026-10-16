@@ -5,9 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       name="description"
-      content="AI 助教实验中枢——自动发现后端教学案例、生成输入表单并展示标准化结果。"
+      content="网络协议分析仪课程项目——提交 Python 代码，查看功能完成度和改进建议。"
     />
-    <title>知行实验室 · AI 助教</title>
+    <title>网络协议分析仪 · 课程项目</title>
     <link rel="stylesheet" href="/assets/styles.css" />
   </head>
   <body>
@@ -18,15 +18,14 @@
         <span class="brand-mark" aria-hidden="true">知</span>
         <span>
           <strong>知行实验室</strong>
-          <small>AI TUTOR LAB</small>
+          <small>NETWORK LAB</small>
         </span>
       </a>
 
       <nav class="top-actions" aria-label="快捷入口">
-        <a href="/docs" target="_blank" rel="noreferrer">API 文档</a>
         <button class="status-pill" id="connection-status" type="button" title="刷新连接状态">
           <span class="status-dot"></span>
-          <span>连接中</span>
+          <span>系统检查中</span>
         </button>
       </nav>
     </header>
@@ -34,55 +33,55 @@
     <main id="top">
       <section class="hero" aria-labelledby="hero-title">
         <div class="hero-copy">
-          <p class="eyebrow"><span>01</span> 教学案例统一工作台</p>
-          <h1 id="hero-title">把复杂过程，<br /><em>讲清楚。</em></h1>
+          <p class="eyebrow"><span>01</span> 计算机网络课程项目</p>
+          <h1 id="hero-title">网络协议，<br /><em>动手实现。</em></h1>
           <p class="hero-lead">
-            一个面向计算机课程的交互式实验入口。后端每注册一个案例，模块目录就会自动更新，
-            无需重复开发页面路由。
+            使用 Python 完成 ARP、ICMP、TCP 报文构造与解析、流量捕获和扫描行为识别。
+            提交你的代码，逐项查看完成情况和改进建议。
           </p>
           <div class="hero-actions">
-            <a class="primary-button" href="#module-catalog">进入模块目录 <span>↘</span></a>
-            <button class="text-button" id="refresh-cases" type="button">重新同步模块</button>
+            <a class="primary-button" href="#module-catalog">开始项目评测 <span>↘</span></a>
+            <button class="text-button" id="refresh-cases" type="button">刷新项目</button>
           </div>
         </div>
 
-        <div class="hero-visual" aria-label="平台能力概览">
+        <div class="hero-visual" aria-label="课程项目内容概览">
           <div class="orbit orbit-one"></div>
           <div class="orbit orbit-two"></div>
           <div class="core-badge">
-            <span>CORE</span>
-            <strong>1.0</strong>
+            <span>CASE</span>
+            <strong>03</strong>
           </div>
-          <div class="capability-tag tag-json">JSON</div>
-          <div class="capability-tag tag-csv">CSV</div>
-          <div class="capability-tag tag-grade">AUTO<br />GRADE</div>
-          <p class="visual-caption">标准协议驱动<br />模块自由生长</p>
+          <div class="capability-tag tag-json">ARP</div>
+          <div class="capability-tag tag-csv">ICMP</div>
+          <div class="capability-tag tag-grade">TCP</div>
+          <p class="visual-caption">构造 · 捕获 · 解析<br />识别异常流量</p>
         </div>
       </section>
 
-      <section class="overview-strip" aria-label="平台状态">
+      <section class="overview-strip" aria-label="项目要求概览">
         <div>
-          <span class="stat-value" id="module-count">—</span>
-          <span class="stat-label">已接入模块</span>
+          <span class="stat-value">3</span>
+          <span class="stat-label">核心协议</span>
         </div>
         <div>
-          <span class="stat-value">2</span>
-          <span class="stat-label">输出格式</span>
+          <span class="stat-value">9</span>
+          <span class="stat-label">功能检查</span>
         </div>
         <div>
-          <span class="stat-value">1.0</span>
-          <span class="stat-label">协议版本</span>
+          <span class="stat-value">100</span>
+          <span class="stat-label">项目总分</span>
         </div>
-        <p>发现 · 执行 · 读取 · 校对</p>
+        <p>构造 · 捕获 · 解析 · 识别</p>
       </section>
 
       <section class="catalog-section" id="module-catalog" aria-labelledby="catalog-title">
         <div class="section-heading">
           <div>
-            <p class="eyebrow"><span>02</span> MODULE CATALOG</p>
-            <h2 id="catalog-title">选择一个实验模块</h2>
+            <p class="eyebrow"><span>02</span> PROJECT TASK</p>
+            <h2 id="catalog-title">项目代码评测</h2>
           </div>
-          <p>目录直接读取后端注册表。新模块上线后，将自动出现在这里。</p>
+          <p>完成项目代码后，在这里提交 Python 文件并查看评测结果。</p>
         </div>
 
         <div class="module-grid" id="module-grid" aria-live="polite">
@@ -98,10 +97,9 @@
         <div class="workbench-header">
           <button class="back-button" id="close-workbench" type="button" aria-label="关闭实验台">←</button>
           <div>
-            <p class="eyebrow"><span>03</span> INTERACTIVE WORKBENCH</p>
-            <h2 id="workbench-title">模块实验台</h2>
+            <p class="eyebrow"><span>03</span> PROJECT REVIEW</p>
+            <h2 id="workbench-title">项目评测区</h2>
           </div>
-          <div class="case-version" id="case-version">v—</div>
         </div>
 
         <div class="workbench-layout">
@@ -111,7 +109,7 @@
             <h3 id="case-name">模块名称</h3>
             <p id="case-description">模块说明</p>
             <div class="dataset-list">
-              <span>输出数据集</span>
+              <span>评测内容</span>
               <div id="case-datasets"></div>
             </div>
           </aside>
@@ -123,7 +121,7 @@
                   <span class="step-number">01</span>
                   <h3 id="input-panel-title">设置实验输入</h3>
                 </div>
-                <span class="schema-note">由 JSON Schema 自动生成</span>
+                <span class="schema-note">按项目要求提交代码</span>
               </div>
               <div class="dynamic-fields" id="dynamic-fields"></div>
               <button class="run-button" id="run-case" type="submit">
@@ -138,42 +136,37 @@
           <div class="result-toolbar">
             <div>
               <span class="step-number">02</span>
-              <h3 id="result-title">运行结果</h3>
+              <h3 id="result-title">评测结果</h3>
             </div>
             <div class="result-actions">
-              <span id="request-id"></span>
-              <a class="download-button" id="download-csv" href="#">下载 CSV</a>
+              <a class="download-button" id="download-csv" href="#">导出评测结果</a>
             </div>
           </div>
           <div class="result-summary" id="result-summary"></div>
           <div class="metric-grid" id="metric-grid"></div>
           <div class="dataset-results" id="dataset-results"></div>
           <div class="diagnostic-list" id="diagnostic-list"></div>
-          <details class="raw-result">
-            <summary>查看原始 JSON</summary>
-            <pre id="raw-json"></pre>
-          </details>
         </section>
 
         <section class="history-panel is-hidden" id="submission-history" aria-labelledby="history-title">
           <div class="history-heading">
             <div>
-              <p class="eyebrow"><span>04</span> LOCAL SUBMISSION HISTORY</p>
-              <h3 id="history-title">本机提交时间线</h3>
+              <p class="eyebrow"><span>04</span> SUBMISSION HISTORY</p>
+              <h3 id="history-title">我的提交记录</h3>
             </div>
-            <p>源码与结果仅存于当前浏览器 IndexedDB；清理站点数据会删除记录。</p>
+            <p>源码与评测结果保存在当前浏览器中；清理浏览器数据会删除这些记录。</p>
           </div>
           <div class="history-layout">
             <div class="submission-timeline" id="submission-timeline"></div>
             <div class="diff-panel">
-              <h4>版本差异</h4>
+              <h4>提交内容对比</h4>
               <div class="diff-controls">
-                <label>旧版本<select id="diff-from"></select></label>
+                <label>较早提交<select id="diff-from"></select></label>
                 <span>→</span>
-                <label>新版本<select id="diff-to"></select></label>
+                <label>较新提交<select id="diff-to"></select></label>
                 <button type="button" id="compare-versions">比较</button>
               </div>
-              <pre class="code-diff" id="code-diff">至少提交两个版本后可进行比较。</pre>
+              <pre class="code-diff" id="code-diff">至少提交两次后可进行比较。</pre>
             </div>
           </div>
         </section>
@@ -182,7 +175,7 @@
       <section class="empty-error is-hidden" id="global-error" role="alert">
         <span>!</span>
         <div>
-          <strong>暂时无法读取模块</strong>
+          <strong>暂时无法读取项目</strong>
           <p id="global-error-message"></p>
         </div>
         <button type="button" id="retry-load">重试</button>
@@ -191,8 +184,8 @@
 
     <footer>
       <div class="footer-mark">知行</div>
-      <p>AI 助教原型系统 · 模块化教学实验底座</p>
-      <p>JSON / CSV STANDARD INTERFACE</p>
+      <p>计算机网络课程项目 · 网络协议分析仪</p>
+      <p>提交代码 · 查看结果 · 持续改进</p>
     </footer>
 
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
