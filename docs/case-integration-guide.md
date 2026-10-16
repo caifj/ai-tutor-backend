@@ -17,7 +17,7 @@
 ## 二、建议目录
 
 ```text
-my_case_package/
+cases/case_nn_my_case/
   __init__.py       # register_cases 注册入口
   adapter.py        # CaseAdapter 实现
   algorithm.py      # 案例自身算法，可继续拆分
@@ -123,9 +123,10 @@ class MyCase(CaseAdapter):
 
 ## 五、注册案例
 
-案例包的 `__init__.py` 暴露固定注册函数：
+案例包在 `cases/` 中使用独立目录，并由 `cases/__init__.py` 的统一注册函数加载：
 
 ```python
+# cases/__init__.py
 def register_cases(registry):
     registry.register(MyCase())
 ```
@@ -133,7 +134,7 @@ def register_cases(registry):
 通过环境变量加载一个或多个案例包：
 
 ```powershell
-$env:AI_TUTOR_CASE_MODULES = "my_case_package"
+$env:AI_TUTOR_CASE_MODULES = "cases"
 uvicorn ai_tutor_backend.main:app --reload
 ```
 

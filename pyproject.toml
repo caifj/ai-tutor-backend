@@ -21,12 +21,15 @@ dev = [
   "pytest-cov>=5.0,<7.0",
   "ruff>=0.6,<1.0",
 ]
+capture = [
+  "scapy>=2.6,<3.0",
+]
 
 [project.scripts]
 ai-tutor-api = "ai_tutor_backend.main:run"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/ai_tutor_backend"]
+packages = ["src/ai_tutor_backend", "cases"]
 
 [tool.pytest.ini_options]
 addopts = "-q"

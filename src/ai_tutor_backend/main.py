@@ -11,7 +11,7 @@ from .registry import CaseRegistry
 
 def build_app():
     registry = CaseRegistry()
-    configured_modules = os.getenv("AI_TUTOR_CASE_MODULES", "")
+    configured_modules = os.getenv("AI_TUTOR_CASE_MODULES", "cases")
     load_case_modules(registry, configured_modules.split(","))
     return create_app(registry=registry)
 
