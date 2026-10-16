@@ -27,7 +27,7 @@ cases/case_nn_my_case/
 仓库内的完整可运行示例位于：
 
 ```text
-examples/demo_case_package/
+cases/examples/demo_case_package/
   __init__.py
   echo_case.py
 ```
@@ -167,7 +167,7 @@ $env:AI_TUTOR_CASE_MODULES = "course_a_cases,course_b_cases"
 ## 六、运行仓库中的示例
 
 ```powershell
-$env:AI_TUTOR_CASE_MODULES = "examples.demo_case_package"
+$env:AI_TUTOR_CASE_MODULES = "cases.examples.demo_case_package"
 uvicorn ai_tutor_backend.main:app --reload
 ```
 

@@ -82,6 +82,10 @@ def test_case_registers_with_python_file_schema() -> None:
     assert adapter.descriptor.version == "2.0.0"
     assert adapter.descriptor.input_schema["x-ui-mode"] == "python-file"
     assert set(adapter.descriptor.input_schema["properties"]) == {"filename", "source_code"}
+    assert {item.case_id for item in registry.list()} == {
+        "demo.echo",
+        "network.protocol-analyzer",
+    }
 
 
 def test_complete_submission_passes_core_static_checks() -> None:

@@ -101,8 +101,7 @@ src/ai_tutor_backend/
   csv_export.py   标准长表 CSV 导出
 tests/            注册、导出、校对和端到端接口测试
 docs/             接口契约
-examples/         不默认加载的接入演示插件
 frontend/dist/    由 FastAPI 同源托管的模块化展示前端
-cases/            正式接入案例，每个案例使用独立子目录
+cases/            正式案例、测试提交文件及 examples/ 接入演示案例
 ```
 

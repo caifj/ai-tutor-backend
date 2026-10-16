@@ -4,7 +4,7 @@ import pytest
 
 from ai_tutor_backend.models import ExecutionContext
 from ai_tutor_backend.registry import CaseInputError, CaseRegistry
-from examples.demo_case_package import EchoCase, register_cases
+from cases.examples.demo_case_package import EchoCase, register_cases
 
 
 def test_demo_package_registers_and_executes() -> None:

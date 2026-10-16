@@ -31,7 +31,7 @@ cases/case_03_network_protocol_analyzer/
 5. 再次提交后，可在“本机提交时间线”选择历史版本并查看逐行差异。
 
 页面不会提供源码文本框或协议参数表单，文件扩展名和大小会在浏览器与后端两端校验。
-可直接使用仓库中的 `examples/case_03_submission.py` 验证完整流程。
+可直接使用仓库中的 `cases/case_03_submission.py` 验证完整流程。
 
 ## HTTP 请求
 
