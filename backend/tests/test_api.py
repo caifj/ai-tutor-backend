@@ -22,6 +22,7 @@ class TestAdapter(CaseAdapter):
             case_id="test.echo",
             name="Echo adapter",
             course="Test",
+            course_number=1,
             input_schema={"type": "object", "required": ["value"]},
             output_datasets=["echo"],
         )

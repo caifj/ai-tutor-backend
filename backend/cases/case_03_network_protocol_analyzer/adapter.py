@@ -102,6 +102,7 @@ class NetworkProtocolAnalyzerCase(CaseAdapter):
             case_id="network.protocol-analyzer",
             name="网络协议分析仪",
             course="计算机网络",
+            course_number=3,
             description="构造、捕获并解析 ARP、ICMP、TCP 报文，识别端口扫描、主机扫描和 ARP 地址冲突。",
             version="1.0.0",
             input_schema=AnalyzerInput.model_json_schema(),

@@ -137,10 +137,18 @@ class CaseDescriptor(StrictModel):
     case_id: str = Field(min_length=1, max_length=100, pattern=r"^[a-z0-9][a-z0-9._-]*$")
     name: str = Field(min_length=1)
     course: str = Field(min_length=1)
+    course_number: int | None = Field(default=None, ge=1, le=99)
+    catalog_visible: bool = True
     description: str = ""
     version: str = "1.0.0"
     input_schema: JsonObject = Field(default_factory=dict)
     output_datasets: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def require_visible_course_number(self) -> CaseDescriptor:
+        if self.catalog_visible and self.course_number is None:
+            raise ValueError("catalog-visible cases must declare course_number")
+        return self
 
 
 class CaseListResponse(StrictModel):

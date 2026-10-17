@@ -13,7 +13,7 @@ from ai_tutor_backend.registry import CaseAdapter, CaseRegistry
 class LoadedAdapter(CaseAdapter):
     @property
     def descriptor(self) -> CaseDescriptor:
-        return CaseDescriptor(case_id="loaded", name="Loaded", course="Tests")
+        return CaseDescriptor(case_id="loaded", name="Loaded", course="Tests", course_number=1)
 
     def execute(self, input_data: dict, context: ExecutionContext) -> ResultPayload:
         return ResultPayload()

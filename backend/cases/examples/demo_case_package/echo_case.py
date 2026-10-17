@@ -34,6 +34,7 @@ class EchoCase(CaseAdapter):
             case_id="demo.echo",
             name="文本重复演示",
             course="底座接入示例",
+            catalog_visible=False,
             description="验证输入后重复文本，用于演示案例插件的完整接入流程。",
             version="1.0.0",
             input_schema=EchoInput.model_json_schema(),

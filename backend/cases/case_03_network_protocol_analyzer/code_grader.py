@@ -49,6 +49,7 @@ class NetworkProtocolAnalyzerCase(CaseAdapter):
             case_id="network.protocol-analyzer",
             name="网络协议分析仪代码评测",
             course="计算机网络",
+            course_number=3,
             description=(
                 "提交一个 Python 文件，逐项检查其是否实现 ARP、ICMP、TCP 报文构造与解析、"
                 "流量捕获和扫描行为识别，并给出代码质量评分。"

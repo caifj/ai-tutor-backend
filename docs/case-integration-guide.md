@@ -81,6 +81,7 @@ class MyCase(CaseAdapter):
             case_id="course.my-case",
             name="案例名称",
             course="课程名称",
+            course_number=4,
             version="1.0.0",
             input_schema=MyInput.model_json_schema(),
             output_datasets=["main"],
@@ -108,6 +109,10 @@ class MyCase(CaseAdapter):
             metrics={"input_value": data.value},
         )
 ```
+
+`course_number` 是首页课程编号。所有公开展示的案例都必须声明该字段；前端会根据接口返回值
+自动按课程号升序排列，因此后续新增案例无需再修改前端。若案例仅用于底座联调、不应出现在学生
+首页，请设置 `catalog_visible=False`，此时可以不填写 `course_number`。
 
 ### 输出字段选择
 

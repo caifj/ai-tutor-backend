@@ -52,6 +52,7 @@ class AlgorithmComplexityAnalyzerCase(CaseAdapter):
             case_id="algorithm.complexity-analyzer",
             name="算法复杂度分析仪",
             course="算法与数据结构",
+            course_number=5,
             description=(
                 "对比排序、查找等算法在不同数据规模下的运行时间与操作次数，"
                 "输出时间-规模关系数据，并拟合出各自的复杂度曲线。"

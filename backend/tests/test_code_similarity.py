@@ -50,6 +50,7 @@ class PythonScoreCase(CaseAdapter):
             case_id="test.python-score",
             name="Python score",
             course="Test",
+            course_number=1,
             input_schema={"type": "object"},
         )
 

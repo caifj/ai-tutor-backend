@@ -32,6 +32,7 @@ class LearningCase(CaseAdapter):
             case_id="test.learning",
             name="网络协议学习",
             course="计算机网络",
+            course_number=1,
             description="学习 ARP、ICMP 与 TCP 报文分析。",
             output_datasets=["功能检查"],
         )

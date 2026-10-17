@@ -12,21 +12,16 @@ const state = {
   codeReviewRequest: 0,
 };
 
-const HIDDEN_CASE_IDS = new Set(["demo.echo"]);
-
-const CASE_COURSE_NUMBERS = {
-  "network.protocol-analyzer": "03",
-  "algorithm.complexity-analyzer": "05",
-  "database.sql-execution-plan": "07",
-};
-
 function isCodeGraderCase(caseId) {
   const item = state.cases.find((candidate) => candidate.case_id === caseId);
   return item?.input_schema?.["x-ui-mode"] === "python-file";
 }
 
 function courseLabel(caseId, oneBasedIndex) {
-  const number = CASE_COURSE_NUMBERS[caseId] || String(oneBasedIndex).padStart(2, "0");
+  const declaredNumber = caseById(caseId)?.course_number;
+  const number = Number.isInteger(declaredNumber)
+    ? String(declaredNumber).padStart(2, "0")
+    : String(oneBasedIndex).padStart(2, "0");
   return `课程 ${number}`;
 }
 
@@ -156,7 +151,13 @@ async function loadCases() {
     </article>`;
   try {
     const response = await apiRequest("/api/v1/cases");
-    state.cases = (response.items || []).filter((item) => !HIDDEN_CASE_IDS.has(item.case_id));
+    state.cases = (response.items || [])
+      .filter((item) => item.catalog_visible !== false)
+      .sort(
+        (left, right) =>
+          Number(left.course_number ?? Number.MAX_SAFE_INTEGER) -
+          Number(right.course_number ?? Number.MAX_SAFE_INTEGER),
+      );
     if (elements.moduleCount) elements.moduleCount.textContent = state.cases.length;
     renderCases();
     setConnectionStatus("online", "可以提交");

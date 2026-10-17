@@ -58,6 +58,7 @@ class SqlExecutionPlanCase(CaseAdapter):
             case_id="database.sql-execution-plan",
             name="SQL执行计划可视化工具",
             course="数据库系统",
+            course_number=7,
             description=(
                 "解析 MySQL/PostgreSQL 执行计划文本，输出索引使用情况与全表扫描判定，"
                 "并通过 B+ 树模拟演示索引查找路径；支持在线连接真实数据库获取 EXPLAIN。"

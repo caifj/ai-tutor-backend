@@ -76,6 +76,7 @@ class MyCase(CaseAdapter):
             case_id="course.my-case",
             name="案例名称",
             course="课程名称",
+            course_number=4,
             input_schema={"type": "object"},
             output_datasets=["main"],
         )
@@ -84,6 +85,10 @@ class MyCase(CaseAdapter):
         # 在这里实现该案例自己的算法；输入不合法时抛出 CaseInputError。
         return ResultPayload(summary="执行完成", datasets=[], metrics={})
 ```
+
+`course_number` 决定学生首页上的“课程 XX”编号及升序位置。公开案例必须提供该字段；仅用于
+联调且不应显示的案例可设置 `catalog_visible=False`。新增案例后，前端会直接读取接口元数据，
+无需维护案例编号映射。
 
 案例包暴露一个注册钩子：
 

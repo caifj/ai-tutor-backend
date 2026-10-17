@@ -49,6 +49,7 @@ class AlgorithmComplexityAnalyzerCase(CaseAdapter):
             case_id="algorithm.complexity-analyzer",
             name="算法复杂度分析平台",
             course="数据结构与算法",
+            course_number=5,
             description=(
                 "提交一个 Python 文件，逐项检查其是否实现排序与查找算法、在不同数据规模下计时、"
                 "输出时间-规模数据并拟合复杂度曲线，并给出代码质量评分。"
