@@ -4,6 +4,7 @@ import inspect
 from time import perf_counter
 from uuid import uuid4
 
+from .code_execution import CodeRunner, ExecutionRuntime, create_code_runner_from_env
 from .code_similarity import CodeSimilarityService, SimilarityReview
 from .models import (
     Diagnostic,
@@ -14,41 +15,48 @@ from .models import (
     ExecutionStatus,
     ResultPayload,
 )
-from .registry import CaseRegistry
+from .registry import CaseInputError, CaseRegistry
 from .repository import SQLiteResultRepository
 
 
 class ExecutionService:
-    def __init__(self, registry: CaseRegistry, repository: SQLiteResultRepository) -> None:
+    def __init__(
+        self,
+        registry: CaseRegistry,
+        repository: SQLiteResultRepository,
+        code_runner: CodeRunner | None = None,
+    ) -> None:
         self.registry = registry
         self.repository = repository
         self.code_similarity = CodeSimilarityService(repository)
+        self.code_runner = code_runner or create_code_runner_from_env()
 
     async def execute(self, request: ExecutionRequest) -> ExecutionResult:
         adapter = self.registry.get(request.case_id)
         request_id = str(uuid4())
+        source_code = request.input.get("source_code")
+        filename = request.input.get("filename")
+        submitter = self._normalized_submitter(request.metadata)
+        if isinstance(source_code, str) and submitter is None:
+            raise CaseInputError(
+                "提交 Python 代码时必须填写提交人",
+                {"field": "metadata.submitter"},
+            )
         context = ExecutionContext(
             request_id=request_id,
             parameters=request.parameters,
             metadata=request.metadata,
+            runtime=ExecutionRuntime(code_runner=self.code_runner),
         )
         started = perf_counter()
         payload = adapter.execute(request.input, context)
         if inspect.isawaitable(payload):
             payload = await payload
-        source_code = request.input.get("source_code")
-        filename = request.input.get("filename")
-        student_id = request.metadata.get("student_id")
-        if not isinstance(student_id, str) or not student_id.strip():
-            student_id = None
-        elif len(student_id) > 128:
-            student_id = student_id[:128]
-
         similarity_review: SimilarityReview | None = None
         if isinstance(source_code, str):
             similarity_review = self.code_similarity.review(
                 request.case_id,
-                student_id,
+                submitter,
                 source_code,
             )
             self._apply_similarity_review(payload, similarity_review)
@@ -65,11 +73,22 @@ class ExecutionService:
             self.repository.save_code_submission(
                 request_id=request_id,
                 case_id=request.case_id,
-                student_id=student_id,
+                submitter=submitter,
                 filename=filename if isinstance(filename, str) else "submission.py",
                 source_code=source_code,
             )
         return result
+
+    @staticmethod
+    def _normalized_submitter(metadata: dict) -> str | None:
+        value = metadata.get("submitter")
+        if not isinstance(value, str) or not value.strip():
+            # Keep old API clients working while the explicit submitter field replaces
+            # the browser-generated student_id.
+            value = metadata.get("student_id")
+        if not isinstance(value, str) or not value.strip():
+            return None
+        return value.strip()[:128]
 
     @staticmethod
     def _apply_similarity_review(payload: ResultPayload, review: SimilarityReview) -> None:

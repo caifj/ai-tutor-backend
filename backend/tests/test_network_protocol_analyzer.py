@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 
+from ai_tutor_backend.code_execution import ExecutionRuntime, LocalPythonRunner
 from ai_tutor_backend.models import ExecutionContext
 from ai_tutor_backend.registry import CaseInputError, CaseRegistry
 from cases import register_cases
@@ -66,9 +69,14 @@ def analyze():
 
 
 def execute(source: str, filename: str = "student.py"):
-    return NetworkProtocolAnalyzerCase().execute(
-        {"filename": filename, "source_code": source},
-        ExecutionContext(request_id="test-request"),
+    return asyncio.run(
+        NetworkProtocolAnalyzerCase().execute(
+            {"filename": filename, "source_code": source},
+            ExecutionContext(
+                request_id="test-request",
+                runtime=ExecutionRuntime(code_runner=LocalPythonRunner()),
+            ),
+        )
     )
 
 
@@ -79,7 +87,7 @@ def test_case_registers_with_python_file_schema() -> None:
     adapter = registry.get("network.protocol-analyzer")
 
     assert isinstance(adapter, NetworkProtocolAnalyzerCase)
-    assert adapter.descriptor.version == "2.0.0"
+    assert adapter.descriptor.version == "3.0.0"
     assert adapter.descriptor.input_schema["x-ui-mode"] == "python-file"
     assert set(adapter.descriptor.input_schema["properties"]) == {"filename", "source_code"}
     assert {item.case_id for item in registry.list()} == {
@@ -99,8 +107,15 @@ def test_complete_submission_passes_core_static_checks() -> None:
     assert result.metrics["test_pass_rate"] == 100.0
     assert result.metrics["functionality_score"] == 80.0
     assert result.metrics["overall_score"] >= 90
+    assert result.metrics["runtime_status"] == "succeeded"
+    assert result.metrics["runtime_tests_passed"] == result.metrics["runtime_tests_total"]
+    assert result.metrics["runtime_pass_rate"] == 100.0
     assert "duplication_score" not in result.metrics
-    assert len(result.datasets[1].rows) == 2
+    assert len(result.datasets[4].rows) == 2
+    packet_dataset = result.datasets[2]
+    assert packet_dataset.name == "runtime_packets"
+    assert {row["protocol"] for row in packet_dataset.rows} == {"ARP", "ICMP", "TCP"}
+    assert any(row["source"] == "10.0.0.1" for row in packet_dataset.rows)
     assert all(row["passed"] for row in checks.values())
 
 
@@ -111,8 +126,10 @@ def test_incomplete_submission_gets_explainable_failures() -> None:
     assert result.metrics["syntax_valid"] is True
     assert result.metrics["tests_passed"] == 0
     assert any("未" in row["evidence"] for row in checks)
-    assert result.datasets[1].name == "quality_scores"
-    assert result.datasets[2].name == "code_issues"
+    assert result.datasets[1].name == "runtime_tests"
+    assert result.datasets[2].name == "runtime_packets"
+    assert result.datasets[4].name == "quality_scores"
+    assert result.datasets[5].name == "code_issues"
 
 
 def test_syntax_error_returns_zero_score_and_line_number() -> None:
@@ -120,14 +137,16 @@ def test_syntax_error_returns_zero_score_and_line_number() -> None:
 
     assert result.metrics["syntax_valid"] is False
     assert result.metrics["overall_score"] == 0.0
-    assert result.datasets[2].rows[0]["line"] == 1
+    assert result.datasets[5].rows[0]["line"] == 1
     assert result.diagnostics[0].code == "PYTHON_SYNTAX_ERROR"
 
 
 @pytest.mark.parametrize("input_data", [{}, {"filename": "answer.txt", "source_code": "pass"}])
 def test_submission_rejects_missing_or_non_python_file(input_data: dict) -> None:
     with pytest.raises(CaseInputError, match="代码文件输入不合法"):
-        NetworkProtocolAnalyzerCase().execute(
-            input_data,
-            ExecutionContext(request_id="test-request"),
+        asyncio.run(
+            NetworkProtocolAnalyzerCase().execute(
+                input_data,
+                ExecutionContext(request_id="test-request"),
+            )
         )

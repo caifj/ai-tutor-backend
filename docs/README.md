@@ -16,13 +16,16 @@ JSON/CSV 导出、自动校对和结构化错误讲解。当前已接入案例 3
 - 同源展示前端，自动发现已注册案例并生成模块入口和输入表单。
 - 独立 AI 课程助手，支持浏览器端上下文、删除聊天记录和选中模块后的知识点引导。
 - 按案例保存 Python 源码并与不同学生的历史提交查重，超过阈值后自动扣减总分。
-- 默认注册案例 3“网络协议分析仪代码评测”，仅接收 `.py` 文件，以静态分析检查 ARP、
+- 基座提供统一 Python 编译/运行协议；生产环境通过 Unix Socket 调用独立沙箱容器，案例只
+  提供测试夹具、解析运行输出并计算指标。
+- 默认注册案例 3“网络协议分析仪代码评测”，结合静态分析和模拟报文运行测试检查 ARP、
   ICMP、TCP 构造/解析、抓包和异常检测逻辑；浏览器用 IndexedDB 保存本机提交时间线。
 
 完整契约见 [interface.md](interface.md)，案例开发步骤见
 [case-integration-guide.md](case-integration-guide.md)，AI 配置与安全边界见
 [assistant-integration.md](assistant-integration.md)，查重标准、扣分和数据边界见
-[code-similarity.md](code-similarity.md)。
+[code-similarity.md](code-similarity.md)，代码沙箱边界见
+[code-execution.md](code-execution.md)。
 
 已接入正式案例：
 
@@ -107,6 +110,7 @@ def register_cases(registry):
 ```text
 backend/
   src/ai_tutor_backend/     HTTP API、执行、存储、数据契约与组合根
+  sandbox/                  独立 Python 运行沙箱镜像
   src/course_assistant_ai/  独立 AI 问答、模型客户端与行为规范
   src/assignment_grading/   独立作业批改与代码相似度检查
   cases/                 正式案例及 examples/ 接入演示案例

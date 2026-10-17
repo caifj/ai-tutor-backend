@@ -4,6 +4,7 @@ const state = {
   latestResult: null,
   uploadedFile: null,
   history: [],
+  historySubmitterFilter: "",
   expandedHistoryCase: null,
   assistantMessages: [],
   assistantCaseId: null,
@@ -30,13 +31,25 @@ function caseById(caseId) {
 }
 
 function historyForCase(caseId) {
-  return state.history.filter((item) => item.case_id === caseId);
+  return filteredSubmissionHistory().filter((item) => item.case_id === caseId);
+}
+
+function submitterFilterValue(item) {
+  return item.submitter ? String(item.submitter) : "__unassigned__";
+}
+
+function filteredSubmissionHistory() {
+  if (!state.historySubmitterFilter) return state.history;
+  return state.history.filter(
+    (item) => submitterFilterValue(item) === state.historySubmitterFilter,
+  );
 }
 const HISTORY_DB_NAME = "ai-tutor-lab";
 const HISTORY_STORE_NAME = "submissions";
 const ASSISTANT_STORE_NAME = "assistant_chat";
 const ASSISTANT_CONTEXT_KEY = "course-assistant-main";
 const STUDENT_ID_STORAGE_KEY = "ai-tutor-student-id";
+const SUBMITTER_STORAGE_KEY = "ai-tutor-submitter";
 
 function getOrCreateStudentId() {
   try {
@@ -51,6 +64,22 @@ function getOrCreateStudentId() {
 }
 
 const studentId = getOrCreateStudentId();
+
+function getSavedSubmitter() {
+  try {
+    return window.localStorage.getItem(SUBMITTER_STORAGE_KEY) || "";
+  } catch {
+    return "";
+  }
+}
+
+function saveSubmitter(value) {
+  try {
+    window.localStorage.setItem(SUBMITTER_STORAGE_KEY, value);
+  } catch {
+    // The backend request still carries the value when browser storage is unavailable.
+  }
+}
 
 const API_BASE_URL = String(window.AI_TUTOR_API_BASE_URL || "").replace(/\/$/, "");
 
@@ -68,6 +97,7 @@ const elements = {
   runCase: document.querySelector("#run-case"),
   resultPanel: document.querySelector("#result-panel"),
   historyPanel: document.querySelector("#submission-history"),
+  historySubmitterFilter: document.querySelector("#history-submitter-filter"),
   submissionTimeline: document.querySelector("#submission-timeline"),
   codeDiff: document.querySelector("#code-diff"),
   globalError: document.querySelector("#global-error"),
@@ -229,6 +259,9 @@ function selectCase(caseId, shouldScroll = true) {
     selected.description || "该模块暂未提供详细说明。";
   const datasetLabels = {
     functional_tests: "功能完成度",
+    runtime_tests: "隔离运行测试",
+    runtime_packets: "基座返回报文",
+    runtime_observations: "运行输出数据",
     quality_scores: "代码质量",
     code_issues: "问题与建议",
     benchmark_curve: "时间-规模关系",
@@ -288,6 +321,15 @@ function renderPythonFileUploader(schema) {
   document.querySelector(".schema-note").textContent = "仅接受单个 .py 文件";
   elements.runCase.querySelector("span:first-child").textContent = "提交并评测";
   elements.dynamicFields.innerHTML = `
+    <div class="field-group full-width">
+      <label class="field-label" for="submission-author">
+        <span>提交人</span><span class="required-mark">必填</span>
+      </label>
+      <input id="submission-author" type="text" maxlength="128" required
+        autocomplete="name" value="${escapeHtml(getSavedSubmitter())}"
+        placeholder="请输入姓名或学号" />
+      <p class="field-help">同一提交人的历史版本会保存，但不会互相触发查重扣分。</p>
+    </div>
     <div class="python-upload full-width">
       <input id="python-file" type="file" accept=".py,text/x-python" hidden />
       <button class="drop-zone" id="python-drop-zone" type="button">
@@ -303,7 +345,7 @@ function renderPythonFileUploader(schema) {
         <summary>预览待评测源码</summary>
         <pre id="source-preview-code"></pre>
       </details>
-      <p class="upload-safety">代码仅用于项目评测，不会在服务器中运行。</p>
+      <p class="upload-safety">代码将在隔离运行环境中评测，不会访问服务器真实网卡。</p>
     </div>`;
 
   const input = document.querySelector("#python-file");
@@ -468,12 +510,24 @@ function collectInput() {
   return input;
 }
 
+function collectExecutionMetadata() {
+  if (!isCodeGraderCase(state.selectedCase?.case_id)) {
+    return { student_id: studentId };
+  }
+  const submitter = document.querySelector("#submission-author")?.value.trim() || "";
+  if (!submitter) throw new Error("请填写提交人");
+  saveSubmitter(submitter);
+  return { submitter };
+}
+
 async function executeSelectedCase(event) {
   event.preventDefault();
   if (!state.selectedCase) return;
   let input;
+  let metadata;
   try {
     input = collectInput();
+    metadata = collectExecutionMetadata();
   } catch (error) {
     showToast(`输入解析失败：${error.message}`);
     return;
@@ -487,13 +541,13 @@ async function executeSelectedCase(event) {
       body: JSON.stringify({
         case_id: state.selectedCase.case_id,
         input,
-        metadata: { student_id: studentId },
+        metadata,
       }),
     });
     state.latestResult = result;
     renderResult(result);
     if (isCodeGraderCase(state.selectedCase.case_id)) {
-      await saveSubmissionToBrowser(result, input);
+      await saveSubmissionToBrowser(result, input, metadata.submitter);
       await loadSubmissionHistory();
     }
     showToast("评测完成");
@@ -564,6 +618,22 @@ function studentMetrics(metrics) {
     ["代码规范", `${metrics.pep8_score ?? 0} / 10`],
     ["模块化程度", `${metrics.modularity_score ?? 0} / 10`],
   ];
+  if (metrics.runtime_status !== undefined) {
+    const runtimeLabels = {
+      succeeded: "运行成功",
+      compile_error: "编译失败",
+      runtime_error: "运行失败",
+      timed_out: "运行超时",
+      unavailable: "沙箱不可用",
+      internal_error: "运行器异常",
+    };
+    items.push(
+      ["代码运行状态", runtimeLabels[metrics.runtime_status] || metrics.runtime_status],
+      ["运行测试通过率", `${metrics.runtime_pass_rate ?? 0}%`],
+      ["运行测试", `${metrics.runtime_tests_passed ?? 0} / ${metrics.runtime_tests_total ?? 0}`],
+      ["运行耗时", `${metrics.runtime_duration_ms ?? 0} ms`],
+    );
+  }
   if (metrics.similarity_checked_submissions !== undefined) {
     items.push(
       ["同案例查重范围", `${metrics.similarity_checked_submissions} 份历史代码`],
@@ -841,6 +911,9 @@ function findDataset(payload, name) {
 
 function renderCodeEvaluation(payload) {
   const tests = findDataset(payload, "functional_tests").rows;
+  const runtimeTests = findDataset(payload, "runtime_tests").rows;
+  const runtimePackets = findDataset(payload, "runtime_packets");
+  const runtimeObservations = findDataset(payload, "runtime_observations");
   const quality = findDataset(payload, "quality_scores").rows.filter(
     (item) => item.dimension !== "重复代码",
   );
@@ -873,10 +946,29 @@ function renderCodeEvaluation(payload) {
       </details>`,
     )
     .join("");
+  const runtimeDetails = runtimeTests
+    .map(
+      (item) => `<details class="evaluation-detail ${item.passed ? "passed" : "failed"}">
+        <summary>
+          <span class="check-state">${item.passed ? "通过" : "未通过"}</span>
+          <strong>${escapeHtml(item.title)}</strong>
+        </summary>
+        <div class="evaluation-body">
+          <p><span>运行证据</span>${escapeHtml(item.evidence)}</p>
+        </div>
+      </details>`,
+    )
+    .join("");
   return `
     <section class="evaluation-section">
       <div class="dataset-title"><h4>功能检查</h4><span>${tests.filter((item) => item.passed).length} / ${tests.length} PASSED</span></div>
       <div class="evaluation-list">${testDetails}</div>
+    </section>
+    <section class="evaluation-section">
+      <div class="dataset-title"><h4>隔离运行测试</h4><span>${runtimeTests.filter((item) => item.passed).length} / ${runtimeTests.length} PASSED</span></div>
+      <div class="evaluation-list">${runtimeDetails}</div>
+      ${runtimePackets.rows.length ? renderDataset(runtimePackets) : ""}
+      ${runtimeObservations.rows.length ? renderDataset(runtimeObservations) : ""}
     </section>
     <section class="evaluation-section">
       <div class="dataset-title"><h4>代码质量</h4><span>点击展开评分依据</span></div>
@@ -1133,7 +1225,7 @@ async function introduceSelectedModule(selected) {
   }
 }
 
-async function saveSubmissionToBrowser(result, input) {
+async function saveSubmissionToBrowser(result, input, submitter) {
   try {
     const db = await openHistoryDb();
     await new Promise((resolve, reject) => {
@@ -1144,6 +1236,7 @@ async function saveSubmissionToBrowser(result, input) {
         created_at: result.created_at || new Date().toISOString(),
         filename: input.filename,
         source_code: input.source_code,
+        submitter,
         result,
       });
       transaction.oncomplete = resolve;
@@ -1172,11 +1265,33 @@ async function loadSubmissionHistory() {
       .filter((item) => isCodeGraderCase(item.case_id))
       .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
     state.expandedHistoryCase = state.selectedCase?.case_id || null;
+    updateHistorySubmitterFilter();
     renderSubmissionHistory();
   } catch (error) {
     state.history = [];
+    updateHistorySubmitterFilter();
     elements.submissionTimeline.innerHTML = `<p class="history-empty">无法读取本机历史：${escapeHtml(error.message)}</p>`;
   }
+}
+
+function updateHistorySubmitterFilter() {
+  const submitters = [...new Set(state.history.map(submitterFilterValue))].sort((left, right) =>
+    left.localeCompare(right, "zh-CN"),
+  );
+  if (
+    state.historySubmitterFilter &&
+    !submitters.includes(state.historySubmitterFilter)
+  ) {
+    state.historySubmitterFilter = "";
+  }
+  elements.historySubmitterFilter.innerHTML = [
+    '<option value="">全部提交人</option>',
+    ...submitters.map((submitter) => {
+      const label = submitter === "__unassigned__" ? "旧记录（未标注）" : submitter;
+      return `<option value="${escapeHtml(submitter)}">${escapeHtml(label)}</option>`;
+    }),
+  ].join("");
+  elements.historySubmitterFilter.value = state.historySubmitterFilter;
 }
 
 function renderSubmissionHistory() {
@@ -1186,8 +1301,15 @@ function renderSubmissionHistory() {
     updateDiffSelectors();
     return;
   }
+  const visibleHistory = filteredSubmissionHistory();
+  if (!visibleHistory.length) {
+    elements.submissionTimeline.innerHTML =
+      '<p class="history-empty">当前提交人没有本机提交记录。</p>';
+    updateDiffSelectors();
+    return;
+  }
   const groups = [];
-  state.history.forEach((item) => {
+  visibleHistory.forEach((item) => {
     let group = groups.find((entry) => entry.caseId === item.case_id);
     if (!group) {
       group = { caseId: item.case_id, items: [] };
@@ -1205,9 +1327,10 @@ function renderSubmissionHistory() {
         .map((item, itemIndex) => {
           const metrics = item.result?.payload?.metrics || {};
           const time = new Date(item.created_at).toLocaleString("zh-CN", { hour12: false });
+          const submitter = item.submitter || "旧记录（未标注）";
           return `<button class="timeline-item" type="button" data-history-id="${escapeHtml(item.id)}">
             <span class="timeline-dot"></span>
-            <span><b>第 ${group.items.length - itemIndex} 次提交</b><strong>${escapeHtml(item.filename)}</strong><small>${escapeHtml(time)}</small></span>
+            <span><b>第 ${group.items.length - itemIndex} 次提交</b><strong>${escapeHtml(item.filename)}</strong><small>提交人：${escapeHtml(submitter)} · ${escapeHtml(time)}</small></span>
             <em>${escapeHtml(metrics.overall_score ?? "—")}<small>总分</small></em>
           </button>`;
         })
@@ -1302,6 +1425,10 @@ document.querySelector("#refresh-cases").addEventListener("click", () => {
 });
 document.querySelector("#retry-load").addEventListener("click", loadCases);
 document.querySelector("#compare-versions").addEventListener("click", renderVersionDiff);
+elements.historySubmitterFilter.addEventListener("change", (event) => {
+  state.historySubmitterFilter = event.target.value;
+  renderSubmissionHistory();
+});
 elements.connectionStatus.addEventListener("click", checkHealth);
 elements.caseForm.addEventListener("submit", executeSelectedCase);
 elements.assistantForm.addEventListener("submit", (event) => {

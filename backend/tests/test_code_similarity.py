@@ -66,13 +66,13 @@ def make_client() -> tuple[TestClient, SQLiteResultRepository]:
     return TestClient(app), repository
 
 
-def submit(client: TestClient, student_id: str, source: str = SOURCE_A):
+def submit(client: TestClient, submitter: str, source: str = SOURCE_A):
     return client.post(
         "/api/v1/executions",
         json={
             "case_id": "test.python-score",
             "input": {"filename": "answer.py", "source_code": source},
-            "metadata": {"student_id": student_id},
+            "metadata": {"submitter": submitter},
         },
     )
 
@@ -87,26 +87,26 @@ def test_similarity_ignores_comments_and_literal_values() -> None:
     assert calculate_code_similarity(SOURCE_A, SOURCE_B) < 0.85
 
 
-def test_submissions_are_scoped_by_case_and_can_exclude_same_student() -> None:
+def test_submissions_are_scoped_by_case_and_can_exclude_same_submitter() -> None:
     repository = SQLiteResultRepository(":memory:")
     repository.save_code_submission(
         request_id="r1",
         case_id="case.one",
-        student_id="student-a",
+        submitter="student-a",
         filename="a.py",
         source_code=SOURCE_A,
     )
     repository.save_code_submission(
         request_id="r2",
         case_id="case.two",
-        student_id="student-b",
+        submitter="student-b",
         filename="b.py",
         source_code=SOURCE_A,
     )
 
     assert len(repository.list_code_submissions("case.one")) == 1
     assert repository.list_code_submissions(
-        "case.one", excluding_student_id="student-a"
+        "case.one", excluding_submitter="student-a"
     ) == []
     assert repository.list_code_submissions("case.two")[0].request_id == "r2"
 
@@ -142,3 +142,36 @@ def test_different_code_does_not_receive_similarity_penalty() -> None:
     assert metrics["similarity_score"] < 85.0
     assert metrics["similarity_penalty"] == 0.0
     assert metrics["overall_score"] == 90.0
+
+
+def test_code_submission_requires_submitter() -> None:
+    client, _ = make_client()
+
+    result = client.post(
+        "/api/v1/executions",
+        json={
+            "case_id": "test.python-score",
+            "input": {"filename": "answer.py", "source_code": SOURCE_A},
+            "metadata": {},
+        },
+    )
+
+    assert result.status_code == 422
+    assert result.json()["error"]["message"] == "提交 Python 代码时必须填写提交人"
+
+
+def test_legacy_student_id_is_migrated_to_submitter_identity() -> None:
+    repository = SQLiteResultRepository(":memory:")
+    repository.save_code_submission(
+        request_id="legacy",
+        case_id="case.one",
+        student_id="student-a",
+        filename="a.py",
+        source_code=SOURCE_A,
+    )
+
+    stored = repository.list_code_submissions("case.one")[0]
+    assert stored.submitter == "student-a"
+    assert repository.list_code_submissions(
+        "case.one", excluding_submitter="student-a"
+    ) == []

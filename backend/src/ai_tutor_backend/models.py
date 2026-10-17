@@ -121,6 +121,7 @@ class ExecutionContext(StrictModel):
     request_id: str
     parameters: JsonObject = Field(default_factory=dict)
     metadata: JsonObject = Field(default_factory=dict)
+    runtime: Any | None = Field(default=None, exclude=True, repr=False)
 
 
 class ExecutionResult(StrictModel):

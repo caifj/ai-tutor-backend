@@ -18,6 +18,7 @@ class StoredCodeSubmission:
     request_id: str
     case_id: str
     student_id: str | None
+    submitter: str | None
     filename: str
     source_code: str
     created_at: str
@@ -50,10 +51,23 @@ class SQLiteResultRepository:
                 request_id TEXT PRIMARY KEY,
                 case_id TEXT NOT NULL,
                 student_id TEXT,
+                submitter TEXT,
                 filename TEXT NOT NULL,
                 source_code TEXT NOT NULL,
                 created_at TEXT NOT NULL
             )
+            """
+        )
+        columns = {
+            row[1] for row in self._connection.execute("PRAGMA table_info(code_submissions)")
+        }
+        if "submitter" not in columns:
+            self._connection.execute("ALTER TABLE code_submissions ADD COLUMN submitter TEXT")
+        self._connection.execute(
+            """
+            UPDATE code_submissions
+            SET submitter = student_id
+            WHERE submitter IS NULL AND student_id IS NOT NULL
             """
         )
         self._connection.execute(
@@ -100,22 +114,25 @@ class SQLiteResultRepository:
         *,
         request_id: str,
         case_id: str,
-        student_id: str | None,
         filename: str,
         source_code: str,
+        submitter: str | None = None,
+        student_id: str | None = None,
     ) -> None:
+        normalized_submitter = submitter or student_id
         with self._lock, self._connection:
             self._connection.execute(
                 """
                 INSERT INTO code_submissions(
-                    request_id, case_id, student_id, filename, source_code, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?)
+                    request_id, case_id, student_id, submitter, filename, source_code, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(request_id) DO NOTHING
                 """,
                 (
                     request_id,
                     case_id,
                     student_id,
+                    normalized_submitter,
                     filename,
                     source_code,
                     datetime.now(UTC).isoformat(),
@@ -126,16 +143,18 @@ class SQLiteResultRepository:
         self,
         case_id: str,
         *,
+        excluding_submitter: str | None = None,
         excluding_student_id: str | None = None,
     ) -> list[StoredCodeSubmission]:
         query = (
-            "SELECT request_id, case_id, student_id, filename, source_code, created_at "
+            "SELECT request_id, case_id, student_id, submitter, filename, source_code, created_at "
             "FROM code_submissions WHERE case_id = ?"
         )
         parameters: list[str] = [case_id]
-        if excluding_student_id:
-            query += " AND (student_id IS NULL OR student_id <> ?)"
-            parameters.append(excluding_student_id)
+        owner_to_exclude = excluding_submitter or excluding_student_id
+        if owner_to_exclude:
+            query += " AND (submitter IS NULL OR submitter <> ? COLLATE NOCASE)"
+            parameters.append(owner_to_exclude)
         query += " ORDER BY created_at ASC"
         with self._lock:
             rows = self._connection.execute(query, parameters).fetchall()

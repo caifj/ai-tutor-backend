@@ -28,6 +28,7 @@ class TestAdapter(CaseAdapter):
         )
 
     def execute(self, input_data: dict, context: ExecutionContext) -> ResultPayload:
+        assert context.runtime is not None
         if "value" not in input_data:
             raise CaseInputError("value is required", {"field": "value"})
         return ResultPayload(

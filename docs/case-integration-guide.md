@@ -126,6 +126,33 @@ class MyCase(CaseAdapter):
 `ColumnSpec.data_type` 必须与每行实际值一致；底座会拒绝类型不匹配、缺列、未知列或重复
 数据集名称。时间使用 ISO 8601 字符串。
 
+### 使用基座代码运行器
+
+需要执行学生 Python 代码的案例，不得自行调用 `subprocess`。案例只负责构造运行请求，并
+解释基座返回的通用结果：
+
+```python
+from ai_tutor_backend import CodeFile, PythonRunSpec
+
+
+async def execute(self, input_data, context):
+    run = await context.runtime.code_runner.run_python(
+        PythonRunSpec(
+            files=[
+                CodeFile(path="student.py", content=input_data["source_code"]),
+                CodeFile(path="case_harness.py", content=CASE_HARNESS),
+            ],
+            entrypoint="case_harness.py",
+            timeout_seconds=5,
+        )
+    )
+    # 在案例内解析 run.stdout/run.stderr，并生成本案例的数据集、指标和评分。
+```
+
+`CodeRunner` 只返回编译状态、退出码、输出和耗时等通用信息，不包含课程业务判断。生产环境
+必须使用独立沙箱；`local` 运行模式只允许用于开发和自动化测试。完整边界见
+[code-execution.md](code-execution.md)。
+
 ## 五、注册案例
 
 案例包在 `backend/cases/` 中使用独立目录，并由 `backend/cases/__init__.py` 的统一注册函数加载：

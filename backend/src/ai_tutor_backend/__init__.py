@@ -1,6 +1,14 @@
 """AI teaching assistant backend foundation."""
 
 from .app import create_app
+from .code_execution import (
+    CodeExecutionStatus,
+    CodeFile,
+    CodeRunner,
+    ExecutionRuntime,
+    PythonRunResult,
+    PythonRunSpec,
+)
 from .models import (
     CaseDescriptor,
     ColumnSpec,
@@ -18,12 +26,18 @@ __all__ = [
     "CaseDescriptor",
     "CaseInputError",
     "CaseRegistry",
+    "CodeExecutionStatus",
+    "CodeFile",
+    "CodeRunner",
     "ColumnSpec",
     "DataType",
     "Dataset",
     "Diagnostic",
     "DiagnosticLevel",
     "ExecutionContext",
+    "ExecutionRuntime",
+    "PythonRunResult",
+    "PythonRunSpec",
     "ResultPayload",
     "create_app",
 ]

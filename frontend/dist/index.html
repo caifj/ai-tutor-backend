@@ -227,7 +227,15 @@
               <p class="eyebrow"><span>05</span> SUBMISSION HISTORY</p>
               <h3 id="history-title">我的提交记录</h3>
             </div>
-            <p>源码与评测结果保存在当前浏览器中；清理浏览器数据会删除这些记录。</p>
+            <div class="history-heading-actions">
+              <label class="history-filter" for="history-submitter-filter">
+                <span>按提交人筛选</span>
+                <select id="history-submitter-filter">
+                  <option value="">全部提交人</option>
+                </select>
+              </label>
+              <p>源码与评测结果保存在当前浏览器中；清理浏览器数据会删除这些记录。</p>
+            </div>
           </div>
           <div class="history-layout">
             <div class="submission-timeline" id="submission-timeline"></div>

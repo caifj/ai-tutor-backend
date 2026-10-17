@@ -129,6 +129,7 @@ def test_code_review_is_limited_and_does_not_send_source_code() -> None:
         json={
             "case_id": "test.learning",
             "input": {"source_code": secret_source, "filename": "answer.py"},
+            "metadata": {"submitter": "student-a"},
         },
     )
 

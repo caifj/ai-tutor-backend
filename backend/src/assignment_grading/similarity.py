@@ -22,7 +22,7 @@ class SubmissionRepository(Protocol):
         self,
         case_id: str,
         *,
-        excluding_student_id: str | None = None,
+        excluding_submitter: str | None = None,
     ) -> list[StoredSubmission]: ...
 
 
@@ -124,10 +124,10 @@ class CodeSimilarityService:
             100.0,
         )
 
-    def review(self, case_id: str, student_id: str | None, source_code: str) -> SimilarityReview:
+    def review(self, case_id: str, submitter: str | None, source_code: str) -> SimilarityReview:
         candidates = self.repository.list_code_submissions(
             case_id,
-            excluding_student_id=student_id,
+            excluding_submitter=submitter,
         )
         highest = max(
             (calculate_code_similarity(source_code, candidate.source_code) for candidate in candidates),

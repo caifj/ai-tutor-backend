@@ -1,0 +1,16 @@
+FROM python:3.11-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    AI_TUTOR_SANDBOX_UID=65534 \
+    AI_TUTOR_SANDBOX_GID=65534
+
+WORKDIR /app
+COPY backend /app/backend
+RUN python -m pip install --upgrade pip \
+    && python -m pip install /app/backend \
+    && mkdir -p /run/ai-tutor-sandbox \
+    && chmod 0777 /run/ai-tutor-sandbox
+
+CMD ["uvicorn", "ai_tutor_backend.sandbox_app:app", "--uds", "/run/ai-tutor-sandbox/runner.sock", "--workers", "1"]

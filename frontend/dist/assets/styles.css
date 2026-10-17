@@ -1647,11 +1647,34 @@ footer {
   font: 600 25px/1.2 Georgia, "Songti SC", serif;
 }
 
-.history-heading > p {
+.history-heading-actions {
+  display: grid;
+  justify-items: end;
+  gap: 10px;
+}
+
+.history-heading-actions > p {
   max-width: 480px;
   margin: 0;
   color: var(--ink-soft);
   font-size: 11px;
+  text-align: right;
+}
+
+.history-filter {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--ink-soft);
+  font-size: 11px;
+}
+
+.history-filter select {
+  min-width: 180px;
+  padding: 8px 30px 8px 10px;
+  color: var(--ink);
+  border: 1px solid var(--line);
+  background: var(--white);
 }
 
 .history-layout {
@@ -2090,6 +2113,14 @@ footer p:last-child {
   .history-heading {
     align-items: start;
     flex-direction: column;
+  }
+
+  .history-heading-actions {
+    justify-items: start;
+  }
+
+  .history-heading-actions > p {
+    text-align: left;
   }
 
   .diff-controls {

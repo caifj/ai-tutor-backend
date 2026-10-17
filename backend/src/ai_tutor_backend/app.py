@@ -20,6 +20,7 @@ from .assistant import (
     CodeReviewRequest,
     ModuleIntroductionRequest,
 )
+from .code_execution import CodeRunner
 from .csv_export import execution_to_csv, grade_to_csv
 from .grading import compare_payloads
 from .models import (
@@ -50,6 +51,7 @@ def create_app(
     registry: CaseRegistry | None = None,
     repository: SQLiteResultRepository | None = None,
     assistant_service: AssistantService | None = None,
+    code_runner: CodeRunner | None = None,
 ) -> FastAPI:
     app = FastAPI(
         title="AI Tutor Backend",
@@ -78,7 +80,11 @@ def create_app(
         os.getenv("AI_TUTOR_DB_PATH", str(backend_directory / "var" / "ai_tutor.db"))
     )
     app.state.repository = repository or SQLiteResultRepository(default_db)
-    app.state.execution_service = ExecutionService(app.state.registry, app.state.repository)
+    app.state.execution_service = ExecutionService(
+        app.state.registry,
+        app.state.repository,
+        code_runner=code_runner,
+    )
     app.state.assistant_service = assistant_service or AssistantService()
 
     @app.exception_handler(RequestValidationError)
