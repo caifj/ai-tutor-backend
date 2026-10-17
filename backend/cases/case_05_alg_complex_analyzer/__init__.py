@@ -1,8 +1,7 @@
-"""Registration entry point for the algorithm complexity analyzer case."""
-
+"""Registration entry point for the algorithm complexity analysis platform."""
 from ai_tutor_backend import CaseRegistry
 
-from .adapter import AlgorithmComplexityAnalyzerCase
+from .code_grader import AlgorithmComplexityAnalyzerCase
 
 __all__ = ["AlgorithmComplexityAnalyzerCase"]
 

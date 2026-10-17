@@ -4,6 +4,7 @@ const state = {
   latestResult: null,
   uploadedFile: null,
   history: [],
+  expandedHistoryCase: null,
   assistantMessages: [],
   assistantCaseId: null,
   assistantBusy: false,
@@ -11,7 +12,28 @@ const state = {
   codeReviewRequest: 0,
 };
 
-const CODE_GRADER_CASE_ID = "network.protocol-analyzer";
+const CASE_PROJECT_NUMBERS = {
+  "network.protocol-analyzer": "03",
+  "algorithm.complexity-analyzer": "05",
+};
+
+function isCodeGraderCase(caseId) {
+  const item = state.cases.find((candidate) => candidate.case_id === caseId);
+  return item?.input_schema?.["x-ui-mode"] === "python-file";
+}
+
+function projectLabel(caseId, oneBasedIndex) {
+  const number = CASE_PROJECT_NUMBERS[caseId];
+  return number ? `项目 ${number}` : `任务 ${String(oneBasedIndex).padStart(2, "0")}`;
+}
+
+function caseById(caseId) {
+  return state.cases.find((item) => item.case_id === caseId) || null;
+}
+
+function historyForCase(caseId) {
+  return state.history.filter((item) => item.case_id === caseId);
+}
 const HISTORY_DB_NAME = "ai-tutor-lab";
 const HISTORY_STORE_NAME = "submissions";
 const ASSISTANT_STORE_NAME = "assistant_chat";
@@ -167,7 +189,7 @@ function renderCases() {
           data-case-id="${escapeHtml(item.case_id)}"
           aria-label="进入${escapeHtml(item.name)}">
           <div class="module-meta">
-            <span>任务 ${String(index + 1).padStart(2, "0")}</span>
+            <span>${projectLabel(item.case_id, index + 1)}</span>
             <span>${escapeHtml(item.course)}</span>
           </div>
           <h3>${escapeHtml(item.name)}</h3>
@@ -196,8 +218,7 @@ function selectCase(caseId, shouldScroll = true) {
   state.uploadedFile = null;
   const index = state.cases.findIndex((item) => item.case_id === caseId) + 1;
 
-  document.querySelector("#case-index").textContent =
-    caseId === CODE_GRADER_CASE_ID ? "项目 03" : `任务 ${String(index).padStart(2, "0")}`;
+  document.querySelector("#case-index").textContent = projectLabel(caseId, index);
   document.querySelector("#case-course").textContent = selected.course;
   document.querySelector("#case-name").textContent = selected.name;
   document.querySelector("#case-description").textContent =
@@ -218,8 +239,8 @@ function selectCase(caseId, shouldScroll = true) {
 
   renderInputForm(selected.input_schema || {});
   elements.resultPanel.classList.add("is-hidden");
-  elements.historyPanel.classList.toggle("is-hidden", caseId !== CODE_GRADER_CASE_ID);
-  if (caseId === CODE_GRADER_CASE_ID) {
+  elements.historyPanel.classList.toggle("is-hidden", !isCodeGraderCase(caseId));
+  if (isCodeGraderCase(caseId)) {
     loadSubmissionHistory();
   }
   elements.workbench.classList.remove("is-hidden");
@@ -467,7 +488,7 @@ async function executeSelectedCase(event) {
     });
     state.latestResult = result;
     renderResult(result);
-    if (state.selectedCase.case_id === CODE_GRADER_CASE_ID) {
+    if (isCodeGraderCase(state.selectedCase.case_id)) {
       await saveSubmissionToBrowser(result, input);
       await loadSubmissionHistory();
     }
@@ -478,7 +499,7 @@ async function executeSelectedCase(event) {
   } finally {
     elements.runCase.disabled = false;
     elements.runCase.querySelector("span:first-child").textContent =
-      state.selectedCase?.case_id === CODE_GRADER_CASE_ID ? "提交并评测" : "运行模块";
+      isCodeGraderCase(state.selectedCase?.case_id) ? "提交并评测" : "运行模块";
   }
 }
 
@@ -488,7 +509,7 @@ function renderResult(result) {
     apiUrl(`/api/v1/results/${encodeURIComponent(result.request_id)}?format=csv`);
   document.querySelector("#result-summary").textContent = payload.summary || "执行完成";
 
-  const metrics = result.case_id === CODE_GRADER_CASE_ID
+  const metrics = isCodeGraderCase(result.case_id)
     ? studentMetrics(payload.metrics || {})
     : Object.entries(payload.metrics || {});
   document.querySelector("#metric-grid").innerHTML = metrics.length
@@ -506,7 +527,7 @@ function renderResult(result) {
     : "";
 
   const datasetResults = document.querySelector("#dataset-results");
-  if (result.case_id === CODE_GRADER_CASE_ID) {
+  if (isCodeGraderCase(result.case_id)) {
     datasetResults.innerHTML = renderCodeEvaluation(payload);
   } else {
     const algorithmColors = buildAlgorithmColorMap(payload.datasets || []);
@@ -514,13 +535,13 @@ function renderResult(result) {
       .map((dataset) => renderDataset(dataset, { algorithmColors }))
       .join("");
   }
-  if (result.case_id === CODE_GRADER_CASE_ID) {
+  if (isCodeGraderCase(result.case_id)) {
     loadAiCodeReview(result.request_id);
   }
   document.querySelector("#diagnostic-list").innerHTML = (payload.diagnostics || [])
     .map(
       (item) => `<div class="diagnostic-item ${escapeHtml(item.level)}">
-        ${result.case_id === CODE_GRADER_CASE_ID ? "" : `<span class="diagnostic-code">${escapeHtml(item.code)}</span>`}
+        ${isCodeGraderCase(result.case_id) ? "" : `<span class="diagnostic-code">${escapeHtml(item.code)}</span>`}
         <span>${escapeHtml(item.message)}</span>
       </div>`,
     )
@@ -1131,7 +1152,7 @@ async function saveSubmissionToBrowser(result, input) {
 }
 
 async function loadSubmissionHistory() {
-  if (state.selectedCase?.case_id !== CODE_GRADER_CASE_ID) return;
+  if (!isCodeGraderCase(state.selectedCase?.case_id)) return;
   try {
     const db = await openHistoryDb();
     const all = await new Promise((resolve, reject) => {
@@ -1144,8 +1165,9 @@ async function loadSubmissionHistory() {
     });
     db.close();
     state.history = all
-      .filter((item) => item.case_id === CODE_GRADER_CASE_ID)
+      .filter((item) => isCodeGraderCase(item.case_id))
       .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
+    state.expandedHistoryCase = state.selectedCase?.case_id || null;
     renderSubmissionHistory();
   } catch (error) {
     state.history = [];
@@ -1157,48 +1179,85 @@ function renderSubmissionHistory() {
   if (!state.history.length) {
     elements.submissionTimeline.innerHTML =
       '<p class="history-empty">尚无本机提交。完成第一次评测后，这里会出现版本记录。</p>';
-  } else {
-    elements.submissionTimeline.innerHTML = state.history
-      .map((item, index) => {
-        const metrics = item.result?.payload?.metrics || {};
-        const time = new Date(item.created_at).toLocaleString("zh-CN", { hour12: false });
-        return `<button class="timeline-item" type="button" data-history-id="${escapeHtml(item.id)}">
-          <span class="timeline-dot"></span>
-          <span><b>第 ${state.history.length - index} 次提交</b><strong>${escapeHtml(item.filename)}</strong><small>${escapeHtml(time)}</small></span>
-          <em>${escapeHtml(metrics.overall_score ?? "—")}<small>总分</small></em>
-        </button>`;
-      })
-      .join("");
-    elements.submissionTimeline.querySelectorAll("[data-history-id]").forEach((button) => {
-      button.addEventListener("click", () => {
-        const record = state.history.find((item) => item.id === button.dataset.historyId);
-        if (record?.result) renderResult(record.result);
-      });
-    });
+    updateDiffSelectors();
+    return;
   }
+  const groups = [];
+  state.history.forEach((item) => {
+    let group = groups.find((entry) => entry.caseId === item.case_id);
+    if (!group) {
+      group = { caseId: item.case_id, items: [] };
+      groups.push(group);
+    }
+    group.items.push(item);
+  });
+  elements.submissionTimeline.innerHTML = groups
+    .map((group) => {
+      const meta = caseById(group.caseId);
+      const index = state.cases.findIndex((entry) => entry.case_id === group.caseId) + 1;
+      const isOpen = state.expandedHistoryCase === group.caseId;
+      const latest = group.items[0]?.result?.payload?.metrics?.overall_score;
+      const rows = group.items
+        .map((item, itemIndex) => {
+          const metrics = item.result?.payload?.metrics || {};
+          const time = new Date(item.created_at).toLocaleString("zh-CN", { hour12: false });
+          return `<button class="timeline-item" type="button" data-history-id="${escapeHtml(item.id)}">
+            <span class="timeline-dot"></span>
+            <span><b>第 ${group.items.length - itemIndex} 次提交</b><strong>${escapeHtml(item.filename)}</strong><small>${escapeHtml(time)}</small></span>
+            <em>${escapeHtml(metrics.overall_score ?? "—")}<small>总分</small></em>
+          </button>`;
+        })
+        .join("");
+      return `<div class="history-group ${isOpen ? "is-open" : ""}" data-case-id="${escapeHtml(group.caseId)}">
+        <button class="history-group-head" type="button" data-history-toggle="${escapeHtml(group.caseId)}" aria-expanded="${isOpen ? "true" : "false"}">
+          <span class="history-group-title">
+            <b>${escapeHtml(projectLabel(group.caseId, index < 1 ? 1 : index))} · ${escapeHtml(meta?.name || group.caseId)}</b>
+            <small>${group.items.length} 次提交${latest === undefined ? "" : ` · 最新 ${escapeHtml(String(latest))} 分`}</small>
+          </span>
+          <span class="history-group-caret">▾</span>
+        </button>
+        <div class="history-group-body">${rows}</div>
+      </div>`;
+    })
+    .join("");
+  elements.submissionTimeline.querySelectorAll("[data-history-toggle]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const caseId = button.dataset.historyToggle;
+      state.expandedHistoryCase = state.expandedHistoryCase === caseId ? null : caseId;
+      renderSubmissionHistory();
+    });
+  });
+  elements.submissionTimeline.querySelectorAll("[data-history-id]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const record = state.history.find((item) => item.id === button.dataset.historyId);
+      if (record?.result) renderResult(record.result);
+    });
+  });
   updateDiffSelectors();
 }
 
 function updateDiffSelectors() {
-  const options = state.history
-    .map((item, index) => `<option value="${escapeHtml(item.id)}">第 ${state.history.length - index} 次 · ${escapeHtml(item.filename)}</option>`)
+  const items = historyForCase(state.selectedCase?.case_id);
+  const options = items
+    .map((item, index) => `<option value="${escapeHtml(item.id)}">第 ${items.length - index} 次 · ${escapeHtml(item.filename)}</option>`)
     .join("");
   const from = document.querySelector("#diff-from");
   const to = document.querySelector("#diff-to");
   from.innerHTML = options || '<option value="">暂无版本</option>';
   to.innerHTML = options || '<option value="">暂无版本</option>';
-  if (state.history.length >= 2) {
-    from.value = state.history[1].id;
-    to.value = state.history[0].id;
+  if (items.length >= 2) {
+    from.value = items[1].id;
+    to.value = items[0].id;
     renderVersionDiff();
   } else {
-    elements.codeDiff.textContent = "至少提交两次后可进行比较。";
+    elements.codeDiff.textContent = "当前项目至少提交两次后可进行比较。";
   }
 }
 
 function renderVersionDiff() {
-  const oldRecord = state.history.find((item) => item.id === document.querySelector("#diff-from").value);
-  const newRecord = state.history.find((item) => item.id === document.querySelector("#diff-to").value);
+  const scope = historyForCase(state.selectedCase?.case_id);
+  const oldRecord = scope.find((item) => item.id === document.querySelector("#diff-from").value);
+  const newRecord = scope.find((item) => item.id === document.querySelector("#diff-to").value);
   if (!oldRecord || !newRecord) {
     showToast("请选择两次可比较的提交");
     return;

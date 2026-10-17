@@ -6,111 +6,183 @@ from ai_tutor_backend.models import ExecutionContext
 from ai_tutor_backend.registry import CaseInputError, CaseRegistry
 from cases import register_cases
 from cases.case_05_alg_complex_analyzer import AlgorithmComplexityAnalyzerCase
-from cases.case_05_alg_complex_analyzer.benchmark import analyze
+
+COMPLETE_SUBMISSION = '''
+import json
+import math
+import random
+import timeit
 
 
-def execute(input_data: dict) -> object:
+def bubble_sort(data):
+    arr = data[:]
+    for i in range(len(arr) - 1):
+        for j in range(len(arr) - i - 1):
+            if arr[j] > arr[j + 1]:
+                arr[j], arr[j + 1] = arr[j + 1], arr[j]
+    return arr
+
+
+def selection_sort(data):
+    arr = data[:]
+    for i in range(len(arr) - 1):
+        k = i
+        for j in range(i + 1, len(arr)):
+            if arr[j] < arr[k]:
+                k = j
+        arr[i], arr[k] = arr[k], arr[i]
+    return arr
+
+
+def quick_sort(data):
+    if len(data) <= 1:
+        return data
+    pivot = data[0]
+    left = [x for x in data if x < pivot]
+    mid = [x for x in data if x == pivot]
+    right = [x for x in data if x > pivot]
+    return quick_sort(left) + mid + quick_sort(right)
+
+
+def merge_sort(data):
+    if len(data) <= 1:
+        return data
+    m = len(data) // 2
+    return merge(merge_sort(data[:m]), merge_sort(data[m:]))
+
+
+def merge(left, right):
+    out = []
+    i = j = 0
+    while i < len(left) and j < len(right):
+        if left[i] <= right[j]:
+            out.append(left[i])
+            i += 1
+        else:
+            out.append(right[j])
+            j += 1
+    return out + left[i:] + right[j:]
+
+
+def linear_search(data, target):
+    for i, value in enumerate(data):
+        if value == target:
+            return i
+    return -1
+
+
+def binary_search(data, target):
+    low, high = 0, len(data) - 1
+    while low <= high:
+        mid = (low + high) // 2
+        if data[mid] == target:
+            return mid
+        if data[mid] < target:
+            low = mid + 1
+        else:
+            high = mid - 1
+    return -1
+
+
+ALGORITHMS = {"bubble": bubble_sort, "selection": selection_sort,
+              "quick": quick_sort, "merge": merge_sort}
+
+
+def benchmark(sizes):
+    rows = []
+    for size in sizes:
+        data = [random.randint(0, 9999) for _ in range(size)]
+        for name, func in ALGORITHMS.items():
+            elapsed = timeit.timeit(lambda f=func, d=data: f(d), number=1)
+            rows.append({"size": size, "algorithm": name, "time": elapsed})
+    return rows
+
+
+def fit_complexity(sizes, times):
+    return [math.log2(n) if n > 0 else 0 for n in sizes]
+
+
+def main():
+    sizes = [100, 200, 400, 800]
+    rows = benchmark(sizes)
+    result = {"rows": rows, "fit": fit_complexity(sizes, [row["time"] for row in rows])}
+    with open("result.json", "w", encoding="utf-8") as handle:
+        json.dump(result, handle, ensure_ascii=False)
+    return result
+
+
+if __name__ == "__main__":
+    main()
+'''
+
+
+def execute(source: str, filename: str = "student.py"):
     return AlgorithmComplexityAnalyzerCase().execute(
-        input_data,
+        {"filename": filename, "source_code": source},
         ExecutionContext(request_id="test-request"),
     )
 
 
-def normalize_model(label: str) -> str:
-    """Ignore spacing and superscript differences in complexity notation."""
-    return label.replace(" ", "").replace("²", "2")
-
-
-def test_case_registers_with_schema() -> None:
+def test_case_registers_with_python_file_schema() -> None:
     registry = CaseRegistry()
     register_cases(registry)
 
     adapter = registry.get("algorithm.complexity-analyzer")
 
     assert isinstance(adapter, AlgorithmComplexityAnalyzerCase)
-    assert adapter.descriptor.course == "算法与数据结构"
-    assert adapter.descriptor.version == "2.0.0"
+    assert adapter.descriptor.name == "算法复杂度分析平台"
+    assert adapter.descriptor.course == "数据结构与算法"
+    assert adapter.descriptor.version == "3.0.0"
+    assert adapter.descriptor.input_schema["x-ui-mode"] == "python-file"
+    assert set(adapter.descriptor.input_schema["properties"]) == {"filename", "source_code"}
     assert set(adapter.descriptor.output_datasets) == {
-        "benchmark_curve",
-        "fitted_curve",
-        "complexity_analysis",
+        "functional_tests",
+        "quality_scores",
+        "code_issues",
     }
-    schema = adapter.descriptor.input_schema
-    assert set(schema["properties"]) == {"algorithms", "max_size"}
-    assert schema["properties"]["algorithms"]["type"] == "array"
-    assert "冒泡排序" in schema["properties"]["algorithms"]["x-enum-labels"]["bubble_sort"]
+    assert {item.case_id for item in registry.list()} == {
+        "algorithm.complexity-analyzer",
+        "demo.echo",
+        "network.protocol-analyzer",
+    }
 
 
-@pytest.mark.parametrize(
-    ("algorithm", "expected"),
-    [
-        ("bubble_sort", "O(n²)"),
-        ("selection_sort", "O(n²)"),
-        ("quick_sort", "O(n log n)"),
-        ("merge_sort", "O(n log n)"),
-        ("linear_search", "O(n)"),
-        ("binary_search", "O(log n)"),
-    ],
-)
-def test_algorithm_fits_expected_complexity(algorithm: str, expected: str) -> None:
-    report = analyze([algorithm], max_size=1000, seed=42)
-    item = report["results"][0]
+def test_complete_submission_passes_core_checks() -> None:
+    result = execute(COMPLETE_SUBMISSION)
+    checks = {row["check_id"]: row for row in result.datasets[0].rows}
 
-    assert normalize_model(item["best_model"]) == normalize_model(expected)
-    best = max(item["models"], key=lambda model: model["r_squared"])
-    assert normalize_model(best["model"]) == normalize_model(expected)
-    assert best["r_squared"] > 0.9
+    assert result.metrics["syntax_valid"] is True
+    assert result.metrics["tests_passed"] == result.metrics["tests_total"]
+    assert result.metrics["test_pass_rate"] == 100.0
+    assert result.metrics["functionality_score"] == 80.0
+    assert result.metrics["overall_score"] >= 90
+    assert len(result.datasets[1].rows) == 2
+    assert all(row["passed"] for row in checks.values())
 
 
-def test_multiple_algorithms_compared_in_one_run() -> None:
-    result = execute(
-        {
-            "algorithms": ["bubble_sort", "merge_sort", "linear_search", "binary_search"],
-            "max_size": 500,
-        }
-    )
+def test_incomplete_submission_gets_explainable_failures() -> None:
+    result = execute("def hello():\n    return 'hello'\n")
+    checks = result.datasets[0].rows
 
-    assert result.metrics["对比算法数"] == 4
-    assert result.metrics["采样点数"] == 5
-    assert isinstance(result.metrics["复杂度拟合"], list)
-    assert len(result.metrics["复杂度拟合"]) == 4
-
-    expected_names = {"冒泡排序", "归并排序", "顺序查找", "二分查找"}
-    curve = result.datasets[0]
-    assert len(curve.rows) == 4 * 5
-    assert {row["algorithm_name"] for row in curve.rows} == expected_names
-
-    analysis = result.datasets[2]
-    assert len(analysis.rows) == 4 * 4
-    assert {row["algorithm_name"] for row in analysis.rows} == expected_names
-    assert {row["is_best_fit"] for row in analysis.rows} == {True, False}
-
-    fitted = result.datasets[1]
-    assert len(fitted.rows) == 4 * 20
+    assert result.metrics["syntax_valid"] is True
+    assert result.metrics["tests_passed"] == 0
+    assert any("未" in row["evidence"] for row in checks)
+    assert result.datasets[1].name == "quality_scores"
+    assert result.datasets[2].name == "code_issues"
 
 
-def test_output_uses_chinese_names_without_machine_identifiers() -> None:
-    result = execute({"algorithms": ["bubble_sort"], "max_size": 500})
+def test_syntax_error_returns_zero_score_and_line_number() -> None:
+    result = execute("def broken(:\n    pass\n")
 
-    for dataset in result.datasets:
-        assert "algorithm" not in {column.key for column in dataset.columns}
-    assert "bubble_sort" not in result.summary
-    assert "对比算法数" in result.metrics
-    assert result.diagnostics[0].code == "基准测试完成"
+    assert result.metrics["syntax_valid"] is False
+    assert result.metrics["overall_score"] == 0.0
+    assert result.datasets[2].rows[0]["line"] == 1
+    assert result.diagnostics[0].code == "PYTHON_SYNTAX_ERROR"
 
 
-@pytest.mark.parametrize(
-    "input_data",
-    [
-        {"algorithms": []},
-        {"algorithms": ["unknown"]},
-        {"max_size": 99},
-        {"max_size": 3001},
-        {"algorithms": ["bubble_sort"], "extra": True},
-    ],
-)
-def test_invalid_input_raises_case_input_error(input_data: dict) -> None:
-    with pytest.raises(CaseInputError, match="输入不合法"):
+@pytest.mark.parametrize("input_data", [{}, {"filename": "answer.txt", "source_code": "pass"}])
+def test_submission_rejects_missing_or_non_python_file(input_data: dict) -> None:
+    with pytest.raises(CaseInputError, match="代码文件输入不合法"):
         AlgorithmComplexityAnalyzerCase().execute(
             input_data,
             ExecutionContext(request_id="test-request"),

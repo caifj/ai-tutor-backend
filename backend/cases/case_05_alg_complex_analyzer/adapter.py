@@ -213,3 +213,8 @@ class AlgorithmComplexityAnalyzerCase(CaseAdapter):
                 "算法复杂度分析仪输入不合法",
                 {"errors": exc.errors(include_context=False, include_url=False)},
             ) from exc
+
+
+# Compatibility import: the registered case is the source-code grader.
+# The benchmark-based simulator above is retained only as an internal reference implementation.
+from .code_grader import AlgorithmComplexityAnalyzerCase  # noqa: F401, F811
