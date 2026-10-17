@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from ai_tutor_backend.grading import compare_payloads
 from ai_tutor_backend.models import (
     ColumnSpec,
     ComparisonPolicy,
@@ -8,6 +7,7 @@ from ai_tutor_backend.models import (
     DataType,
     ResultPayload,
 )
+from assignment_grading import compare_payloads
 
 
 def payload(value: float, rows: list[dict] | None = None) -> ResultPayload:

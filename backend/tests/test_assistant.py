@@ -5,11 +5,10 @@ import asyncio
 from fastapi.testclient import TestClient
 
 from ai_tutor_backend.app import create_app
-from ai_tutor_backend.assistant.models import AssistantMessage
-from ai_tutor_backend.assistant.service import AssistantService
 from ai_tutor_backend.models import CaseDescriptor, ExecutionContext, ResultPayload
 from ai_tutor_backend.registry import CaseAdapter, CaseRegistry
 from ai_tutor_backend.repository import SQLiteResultRepository
+from course_assistant_ai import AssistantMessage, AssistantService, LearningModuleContext
 
 
 class FakeCompletionClient:
@@ -40,6 +39,17 @@ class LearningCase(CaseAdapter):
         return ResultPayload(summary="ok")
 
 
+def learning_module_context() -> LearningModuleContext:
+    descriptor = LearningCase().descriptor
+    return LearningModuleContext(
+        case_id=descriptor.case_id,
+        name=descriptor.name,
+        course=descriptor.course,
+        description=descriptor.description,
+        output_datasets=descriptor.output_datasets,
+    )
+
+
 def build_client(
     reply: str = "先说说你已经理解了哪一步，我们再一起继续。",
 ) -> tuple[TestClient, FakeCompletionClient]:
@@ -57,10 +67,10 @@ def build_client(
 def test_service_injects_learning_policy_and_trusted_case_context() -> None:
     fake = FakeCompletionClient()
     service = AssistantService(fake)
-    case = LearningCase().descriptor
+    module = learning_module_context()
 
     result = asyncio.run(
-        service.chat([AssistantMessage(role="user", content="ARP 的作用是什么？")], case)
+        service.chat([AssistantMessage(role="user", content="ARP 的作用是什么？")], module)
     )
 
     assert result.model == "spark-x2.5-1.7b"
@@ -112,7 +122,7 @@ def test_module_introduction_is_normalized_and_limited_to_100_characters() -> No
     fake = FakeCompletionClient("知识点\n" + "协" * 120)
     service = AssistantService(fake)
 
-    result = asyncio.run(service.introduce(LearningCase().descriptor))
+    result = asyncio.run(service.introduce(learning_module_context()))
 
     assert len(result.reply) <= 100
     assert "\n" not in result.reply

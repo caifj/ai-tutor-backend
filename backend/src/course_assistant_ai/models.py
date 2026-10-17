@@ -3,11 +3,29 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, JsonValue, model_validator
 
 
 class AssistantModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
+
+
+class LearningModuleContext(AssistantModel):
+    """Minimal trusted module context owned by the AI boundary."""
+
+    case_id: str
+    name: str
+    course: str
+    description: str = ""
+    output_datasets: list[str] = Field(default_factory=list)
+
+
+class ReviewContext(AssistantModel):
+    """Sanitized review facts; student source code must never cross this boundary."""
+
+    summary: str = ""
+    metrics: dict[str, JsonValue] = Field(default_factory=dict)
+    issues: list[str] = Field(default_factory=list)
 
 
 class AssistantMessage(AssistantModel):

@@ -10,18 +10,16 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from .assistant import (
-    AssistantChatRequest,
+from assignment_grading import compare_payloads
+from course_assistant_ai import (
     AssistantProviderError,
-    AssistantReply,
     AssistantService,
-    AssistantStatus,
     AssistantUnavailableError,
-    CodeReviewRequest,
-    ModuleIntroductionRequest,
+    create_assistant_router,
 )
+
+from .assistant_gateway import BackendAssistantContextGateway
 from .csv_export import execution_to_csv, grade_to_csv
-from .grading import compare_payloads
 from .models import (
     CaseDescriptor,
     CaseListResponse,
@@ -80,6 +78,10 @@ def create_app(
     app.state.repository = repository or SQLiteResultRepository(default_db)
     app.state.execution_service = ExecutionService(app.state.registry, app.state.repository)
     app.state.assistant_service = assistant_service or AssistantService()
+    app.state.assistant_gateway = BackendAssistantContextGateway(
+        app.state.registry,
+        app.state.repository,
+    )
 
     @app.exception_handler(RequestValidationError)
     async def validation_error_handler(
@@ -169,43 +171,12 @@ def create_app(
     async def get_case(case_id: str) -> CaseDescriptor:
         return app.state.registry.get(case_id).descriptor
 
-    @app.get(
-        "/api/v1/assistant/status",
-        response_model=AssistantStatus,
-        tags=["assistant"],
+    app.include_router(
+        create_assistant_router(
+            app.state.assistant_service,
+            app.state.assistant_gateway,
+        )
     )
-    async def assistant_status() -> AssistantStatus:
-        return app.state.assistant_service.status()
-
-    @app.post(
-        "/api/v1/assistant/chat",
-        response_model=AssistantReply,
-        tags=["assistant"],
-    )
-    async def assistant_chat(body: AssistantChatRequest) -> AssistantReply:
-        case = app.state.registry.get(body.case_id).descriptor if body.case_id else None
-        return await app.state.assistant_service.chat(body.messages, case)
-
-    @app.post(
-        "/api/v1/assistant/module-introduction",
-        response_model=AssistantReply,
-        tags=["assistant"],
-    )
-    async def assistant_module_introduction(
-        body: ModuleIntroductionRequest,
-    ) -> AssistantReply:
-        case = app.state.registry.get(body.case_id).descriptor
-        return await app.state.assistant_service.introduce(case)
-
-    @app.post(
-        "/api/v1/assistant/code-review",
-        response_model=AssistantReply,
-        tags=["assistant"],
-    )
-    async def assistant_code_review(body: CodeReviewRequest) -> AssistantReply:
-        result = app.state.repository.get(body.request_id)
-        case = app.state.registry.get(result.case_id).descriptor
-        return await app.state.assistant_service.review_code(result, case)
 
     @app.post("/api/v1/executions", response_model=ExecutionResult, tags=["execution"])
     async def execute_case(

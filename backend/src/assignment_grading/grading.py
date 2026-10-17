@@ -5,7 +5,7 @@ import math
 from typing import Any
 from uuid import uuid4
 
-from .models import ComparisonPolicy, GradeIssue, GradeReport, ResultPayload
+from ai_tutor_backend.models import ComparisonPolicy, GradeIssue, GradeReport, ResultPayload
 
 _MISSING = object()
 

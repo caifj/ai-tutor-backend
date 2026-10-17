@@ -6,12 +6,24 @@ import os
 import token
 import tokenize
 from dataclasses import dataclass
-
-from .repository import SQLiteResultRepository
+from typing import Protocol
 
 DEFAULT_SIMILARITY_THRESHOLD = 0.85
 DEFAULT_MAX_PENALTY = 30.0
 MINIMUM_TOKEN_COUNT = 40
+
+
+class StoredSubmission(Protocol):
+    source_code: str
+
+
+class SubmissionRepository(Protocol):
+    def list_code_submissions(
+        self,
+        case_id: str,
+        *,
+        excluding_student_id: str | None = None,
+    ) -> list[StoredSubmission]: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -93,7 +105,7 @@ def calculate_code_similarity(left: str, right: str) -> float:
 class CodeSimilarityService:
     def __init__(
         self,
-        repository: SQLiteResultRepository,
+        repository: SubmissionRepository,
         *,
         threshold: float | None = None,
         max_penalty: float | None = None,

@@ -3,10 +3,10 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 
 from ai_tutor_backend.app import create_app
-from ai_tutor_backend.code_similarity import calculate_code_similarity
 from ai_tutor_backend.models import CaseDescriptor, ExecutionContext, ResultPayload
 from ai_tutor_backend.registry import CaseAdapter, CaseRegistry
 from ai_tutor_backend.repository import SQLiteResultRepository
+from assignment_grading import calculate_code_similarity
 
 SOURCE_A = """
 from collections import defaultdict

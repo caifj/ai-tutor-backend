@@ -4,7 +4,8 @@ import inspect
 from time import perf_counter
 from uuid import uuid4
 
-from .code_similarity import CodeSimilarityService, SimilarityReview
+from assignment_grading import CodeSimilarityService, SimilarityReview
+
 from .models import (
     Diagnostic,
     DiagnosticLevel,
