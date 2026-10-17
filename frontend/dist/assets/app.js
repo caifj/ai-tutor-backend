@@ -206,6 +206,9 @@ function selectCase(caseId, shouldScroll = true) {
     functional_tests: "功能完成度",
     quality_scores: "代码质量",
     code_issues: "问题与建议",
+    benchmark_curve: "时间-规模关系",
+    fitted_curve: "拟合复杂度曲线",
+    complexity_analysis: "复杂度拟合分析",
   };
   document.querySelector("#case-datasets").innerHTML = selected.output_datasets.length
     ? selected.output_datasets
@@ -358,6 +361,18 @@ function createField(name, definition, isRequired) {
       ${definition.minimum !== undefined ? `min="${definition.minimum}"` : ""}
       ${definition.maximum !== undefined ? `max="${definition.maximum}"` : ""}
       ${definition.default !== undefined ? `value="${escapeHtml(definition.default)}"` : ""} />`;
+  } else if (type === "array" && definition.items?.enum) {
+    groupClass += " full-width";
+    const selected = new Set(definition.default || []);
+    const labels = definition["x-enum-labels"] || {};
+    control = `<div class="checkbox-grid" id="field-${escapeHtml(name)}">${definition.items.enum
+      .map(
+        (item) => `<label class="checkbox-option">
+          <input type="checkbox" name="${escapeHtml(name)}" value="${escapeHtml(item)}" data-kind="array-enum" ${selected.has(item) ? "checked" : ""} />
+          <span>${escapeHtml(labels[item] || item)}</span>
+        </label>`,
+      )
+      .join("")}</div>`;
   } else if (type === "array" || type === "object") {
     groupClass += " full-width";
     const defaultValue = definition.default ?? (type === "array" ? [] : {});
@@ -410,6 +425,11 @@ function collectInput() {
   const input = {};
   elements.dynamicFields.querySelectorAll("[name]").forEach((field) => {
     const kind = field.dataset.kind;
+    if (kind === "array-enum") {
+      if (!Array.isArray(input[field.name])) input[field.name] = [];
+      if (field.checked) input[field.name].push(field.value);
+      return;
+    }
     if (kind === "boolean") {
       input[field.name] = field.checked;
       return;
@@ -473,19 +493,27 @@ function renderResult(result) {
     : Object.entries(payload.metrics || {});
   document.querySelector("#metric-grid").innerHTML = metrics.length
     ? metrics
-        .map(
-          ([key, value]) => `<article class="metric-card">
+        .map(([key, value]) => {
+          const display = Array.isArray(value)
+            ? value.map((item) => escapeHtml(formatValue(item))).join("<br>")
+            : escapeHtml(formatValue(value));
+          return `<article class="metric-card">
             <span>${escapeHtml(key)}</span>
-            <strong>${escapeHtml(formatValue(value))}</strong>
-          </article>`,
-        )
+            <strong>${display}</strong>
+          </article>`;
+        })
         .join("")
     : "";
 
-  document.querySelector("#dataset-results").innerHTML =
-    result.case_id === CODE_GRADER_CASE_ID
-      ? renderCodeEvaluation(payload)
-      : (payload.datasets || []).map(renderDataset).join("");
+  const datasetResults = document.querySelector("#dataset-results");
+  if (result.case_id === CODE_GRADER_CASE_ID) {
+    datasetResults.innerHTML = renderCodeEvaluation(payload);
+  } else {
+    const algorithmColors = buildAlgorithmColorMap(payload.datasets || []);
+    datasetResults.innerHTML = (payload.datasets || [])
+      .map((dataset) => renderDataset(dataset, { algorithmColors }))
+      .join("");
+  }
   if (result.case_id === CODE_GRADER_CASE_ID) {
     loadAiCodeReview(result.request_id);
   }
@@ -521,19 +549,220 @@ function studentMetrics(metrics) {
   return items;
 }
 
+const CHART_COLORS = [
+  "#ee5b32",
+  "#176f68",
+  "#c99a1f",
+  "#7a5cff",
+  "#2f9e44",
+  "#c83d1e",
+  "#0b7285",
+  "#e8590c",
+];
+
+function isCurveDataset(dataset) {
+  return /curve$/i.test(dataset.name || "");
+}
+
+function buildAlgorithmColorMap(datasets) {
+  const names = [];
+  for (const dataset of datasets) {
+    const column = (dataset.columns || []).find(
+      (item) => item.key === "algorithm_name",
+    );
+    if (!column) continue;
+    for (const row of dataset.rows || []) {
+      const name = row[column.key];
+      if (name && !names.includes(name)) names.push(name);
+    }
+  }
+  const colors = new Map();
+  names.forEach((name, index) => {
+    colors.set(name, CHART_COLORS[index % CHART_COLORS.length]);
+  });
+  return colors;
+}
+
+function trimNumber(value, digits = 2) {
+  return String(Number(value.toFixed(digits)));
+}
+
+function formatTimeValue(seconds) {
+  const abs = Math.abs(seconds);
+  if (abs === 0) return "0";
+  if (abs >= 1) return `${trimNumber(seconds, 2)}s`;
+  if (abs >= 1e-3) return `${trimNumber(seconds * 1e3, 2)}ms`;
+  if (abs >= 1e-6) return `${trimNumber(seconds * 1e6, 2)}µs`;
+  return `${trimNumber(seconds * 1e9, 1)}ns`;
+}
+
+function formatCountValue(value) {
+  const abs = Math.abs(value);
+  if (abs === 0) return "0";
+  if (abs >= 1e6) return `${trimNumber(value / 1e6, 1)}M`;
+  if (abs >= 1e3) return `${trimNumber(value / 1e3, 1)}k`;
+  if (abs >= 1) return String(Math.round(value));
+  return trimNumber(value, 3);
+}
+
+function formatSizeValue(value) {
+  const abs = Math.abs(value);
+  if (abs >= 1e6) return `${trimNumber(value / 1e6, 1)}M`;
+  if (abs >= 1e3) return `${trimNumber(value / 1e3, 1)}k`;
+  return String(Math.round(value));
+}
+
+function renderCurveChart(dataset, algorithmColors) {
+  const columns = dataset.columns || [];
+  const rows = dataset.rows || [];
+  if (!rows.length) return "";
+  const xColumn =
+    columns.find((column) => column.key === "size") ||
+    columns.find((column) => column.data_type === "integer");
+  const yColumn = columns.find((column) => column.data_type === "number");
+  const groupColumn =
+    columns.find((column) => column.key === "algorithm_name") ||
+    columns.find((column) => column.key === "algorithm");
+  if (!xColumn || !yColumn) return "";
+
+  const isTime = yColumn.key === "time_seconds" || yColumn.unit === "s";
+  const yFormat = isTime ? formatTimeValue : formatCountValue;
+
+  const seriesMap = new Map();
+  for (const row of rows) {
+    const x = Number(row[xColumn.key]);
+    const y = Number(row[yColumn.key]);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+    const key = groupColumn ? String(row[groupColumn.key]) : yColumn.title;
+    if (!seriesMap.has(key)) seriesMap.set(key, []);
+    seriesMap.get(key).push({ x, y });
+  }
+  const series = [...seriesMap.entries()]
+    .map(([name, points]) => ({ name, points: points.sort((a, b) => a.x - b.x) }))
+    .filter((item) => item.points.length);
+  if (!series.length) return "";
+
+  const width = 760;
+  const height = 360;
+  const pad = { top: 24, right: 24, bottom: 54, left: 82 };
+  const innerW = width - pad.left - pad.right;
+  const innerH = height - pad.top - pad.bottom;
+
+  const allX = series.flatMap((item) => item.points.map((point) => point.x));
+  const allY = series.flatMap((item) => item.points.map((point) => point.y));
+  let minX = Math.min(...allX);
+  let maxX = Math.max(...allX);
+  if (minX === maxX) {
+    minX -= 1;
+    maxX += 1;
+  }
+
+  const positiveY = allY.filter((value) => value > 0);
+  const useLogY =
+    positiveY.length >= 2 && Math.max(...positiveY) / Math.min(...positiveY) > 30;
+
+  let axisMinY;
+  let axisMaxY;
+  const yTickValues = [];
+  if (useLogY) {
+    axisMinY = 10 ** Math.floor(Math.log10(Math.min(...positiveY)));
+    axisMaxY = 10 ** Math.ceil(Math.log10(Math.max(...allY)));
+    for (let exp = Math.round(Math.log10(axisMinY)); 10 ** exp <= axisMaxY * 1.0001; exp += 1) {
+      yTickValues.push(10 ** exp);
+    }
+  } else {
+    axisMinY = Math.min(...allY, 0);
+    axisMaxY = Math.max(...allY);
+    if (axisMinY === axisMaxY) axisMaxY = axisMinY + 1;
+    for (let i = 0; i <= 5; i += 1) {
+      yTickValues.push(axisMinY + ((axisMaxY - axisMinY) * i) / 5);
+    }
+  }
+
+  const log = (value) => Math.log10(Math.max(value, axisMinY));
+  const sx = (x) => pad.left + ((x - minX) / (maxX - minX)) * innerW;
+  const sy = (y) => {
+    if (useLogY) {
+      const ratio =
+        (log(y) - log(axisMinY)) / (log(axisMaxY) - log(axisMinY) || 1);
+      return pad.top + innerH - ratio * innerH;
+    }
+    return pad.top + innerH - ((y - axisMinY) / (axisMaxY - axisMinY || 1)) * innerH;
+  };
+
+  let grid = "";
+  let yLabels = "";
+  for (const value of yTickValues) {
+    const y = sy(value);
+    grid += `<line x1="${pad.left}" y1="${y.toFixed(1)}" x2="${width - pad.right}" y2="${y.toFixed(1)}" stroke="#e2ddd2" stroke-width="1" />`;
+    yLabels += `<text x="${pad.left - 10}" y="${(y + 4).toFixed(1)}" text-anchor="end" font-size="11" fill="#4f5c62">${escapeHtml(yFormat(value))}</text>`;
+  }
+  let xLabels = "";
+  for (let i = 0; i <= 5; i += 1) {
+    const value = minX + ((maxX - minX) * i) / 5;
+    const x = sx(value);
+    xLabels += `<text x="${x.toFixed(1)}" y="${height - pad.bottom + 20}" text-anchor="middle" font-size="11" fill="#4f5c62">${escapeHtml(formatSizeValue(value))}</text>`;
+  }
+
+  const colorFor = (name, index) =>
+    (algorithmColors && algorithmColors.get(name)) || CHART_COLORS[index % CHART_COLORS.length];
+
+  const lines = series
+    .map((item, index) => {
+      const color = colorFor(item.name, index);
+      const points = item.points
+        .map((point) => `${sx(point.x).toFixed(1)},${sy(point.y).toFixed(1)}`)
+        .join(" ");
+      const dots = item.points
+        .map(
+          (point) =>
+            `<circle cx="${sx(point.x).toFixed(1)}" cy="${sy(point.y).toFixed(1)}" r="3" fill="${color}" />`,
+        )
+        .join("");
+      return `<polyline fill="none" stroke="${color}" stroke-width="2.5" points="${points}" />${dots}`;
+    })
+    .join("");
+
+  const legend = series
+    .map((item, index) => {
+      const color = colorFor(item.name, index);
+      return `<span class="chart-legend-item"><i style="background:${color}"></i>${escapeHtml(item.name)}</span>`;
+    })
+    .join("");
+
+  let scaleNote;
+  if (useLogY) {
+    scaleNote = isTime
+      ? "纵轴为对数刻度（每格约 ×10）。不同算法耗时可能相差几个数量级，靠近底部、接近水平的线表示该算法太快、增长极小（如二分查找），属正常现象。"
+      : "纵轴为对数刻度（每格约 ×10）。比较次数是判断复杂度的可靠依据；贴近底部的线表示增长极慢（如二分查找的 O(log n)）。";
+  } else {
+    scaleNote = "纵轴为线性刻度。";
+  }
+  const svg = `<svg class="curve-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeHtml(dataset.title)}">
+    ${grid}
+    <line x1="${pad.left}" y1="${pad.top}" x2="${pad.left}" y2="${height - pad.bottom}" stroke="#172026" stroke-width="1.5" />
+    <line x1="${pad.left}" y1="${height - pad.bottom}" x2="${width - pad.right}" y2="${height - pad.bottom}" stroke="#172026" stroke-width="1.5" />
+    ${lines}
+    ${xLabels}
+    ${yLabels}
+    <text x="${pad.left + innerW / 2}" y="${height - 8}" text-anchor="middle" font-size="12" fill="#172026" font-weight="700">${escapeHtml(xColumn.title)}</text>
+    <text x="16" y="${pad.top + innerH / 2}" text-anchor="middle" font-size="12" fill="#172026" font-weight="700" transform="rotate(-90 16 ${pad.top + innerH / 2})">${escapeHtml(yColumn.title)}</text>
+  </svg>`;
+
+  return `<div class="curve-chart-wrap">
+    <div class="chart-legend">${legend}</div>
+    ${svg}
+    <p class="chart-caption">横轴：${escapeHtml(xColumn.title)}；纵轴：${escapeHtml(yColumn.title)}。${scaleNote}</p>
+  </div>`;
+}
+
 function renderDataset(dataset, options = {}) {
   const columns = dataset.columns || [];
   const rows = dataset.rows || [];
-  return `<section class="dataset-block">
-    ${
-      options.hideTitle
-        ? ""
-        : `<div class="dataset-title">
-            <h4>${escapeHtml(dataset.title)}</h4>
-            <span>${escapeHtml(dataset.name)} · ${rows.length} ROWS</span>
-          </div>`
-    }
-    <div class="table-scroll">
+  const chart = isCurveDataset(dataset)
+    ? renderCurveChart(dataset, options.algorithmColors)
+    : "";
+  const table = `<div class="table-scroll">
       <table class="result-table">
         <thead><tr>${columns
           .map(
@@ -548,7 +777,13 @@ function renderDataset(dataset, options = {}) {
                   (row) => `<tr>${columns
                     .map((column) => {
                       const value = row[column.key];
-                      const rendered = escapeHtml(formatValue(value));
+                      let rendered = escapeHtml(formatValue(value));
+                      if (column.key === "algorithm_name" && options.algorithmColors) {
+                        const color = options.algorithmColors.get(value);
+                        if (color) {
+                          rendered = `<span class="algo-name"><i class="algo-dot" style="background:${color}"></i><span style="color:${color}">${rendered}</span></span>`;
+                        }
+                      }
                       return `<td>${typeof value === "object" && value !== null ? `<code>${rendered}</code>` : rendered}</td>`;
                     })
                     .join("")}</tr>`,
@@ -557,7 +792,21 @@ function renderDataset(dataset, options = {}) {
             : `<tr><td colspan="${Math.max(columns.length, 1)}">该数据集没有记录</td></tr>`
         }</tbody>
       </table>
-    </div>
+    </div>`;
+  const tableBlock = chart
+    ? `<details class="dataset-table-toggle"><summary>查看数据表（${rows.length} 行）</summary>${table}</details>`
+    : table;
+  return `<section class="dataset-block">
+    ${
+      options.hideTitle
+        ? ""
+        : `<div class="dataset-title">
+            <h4>${escapeHtml(dataset.title)}</h4>
+            <span>${rows.length} 行</span>
+          </div>`
+    }
+    ${chart}
+    ${tableBlock}
   </section>`;
 }
 
