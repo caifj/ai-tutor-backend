@@ -12,9 +12,12 @@ const state = {
   codeReviewRequest: 0,
 };
 
-const CASE_PROJECT_NUMBERS = {
+const HIDDEN_CASE_IDS = new Set(["demo.echo"]);
+
+const CASE_COURSE_NUMBERS = {
   "network.protocol-analyzer": "03",
   "algorithm.complexity-analyzer": "05",
+  "database.sql-execution-plan": "07",
 };
 
 function isCodeGraderCase(caseId) {
@@ -22,9 +25,9 @@ function isCodeGraderCase(caseId) {
   return item?.input_schema?.["x-ui-mode"] === "python-file";
 }
 
-function projectLabel(caseId, oneBasedIndex) {
-  const number = CASE_PROJECT_NUMBERS[caseId];
-  return number ? `项目 ${number}` : `任务 ${String(oneBasedIndex).padStart(2, "0")}`;
+function courseLabel(caseId, oneBasedIndex) {
+  const number = CASE_COURSE_NUMBERS[caseId] || String(oneBasedIndex).padStart(2, "0");
+  return `课程 ${number}`;
 }
 
 function caseById(caseId) {
@@ -153,7 +156,7 @@ async function loadCases() {
     </article>`;
   try {
     const response = await apiRequest("/api/v1/cases");
-    state.cases = response.items || [];
+    state.cases = (response.items || []).filter((item) => !HIDDEN_CASE_IDS.has(item.case_id));
     if (elements.moduleCount) elements.moduleCount.textContent = state.cases.length;
     renderCases();
     setConnectionStatus("online", "可以提交");
@@ -189,7 +192,7 @@ function renderCases() {
           data-case-id="${escapeHtml(item.case_id)}"
           aria-label="进入${escapeHtml(item.name)}">
           <div class="module-meta">
-            <span>${projectLabel(item.case_id, index + 1)}</span>
+            <span>${courseLabel(item.case_id, index + 1)}</span>
             <span>${escapeHtml(item.course)}</span>
           </div>
           <h3>${escapeHtml(item.name)}</h3>
@@ -218,7 +221,7 @@ function selectCase(caseId, shouldScroll = true) {
   state.uploadedFile = null;
   const index = state.cases.findIndex((item) => item.case_id === caseId) + 1;
 
-  document.querySelector("#case-index").textContent = projectLabel(caseId, index);
+  document.querySelector("#case-index").textContent = courseLabel(caseId, index);
   document.querySelector("#case-course").textContent = selected.course;
   document.querySelector("#case-name").textContent = selected.name;
   document.querySelector("#case-description").textContent =
@@ -1211,7 +1214,7 @@ function renderSubmissionHistory() {
       return `<div class="history-group ${isOpen ? "is-open" : ""}" data-case-id="${escapeHtml(group.caseId)}">
         <button class="history-group-head" type="button" data-history-toggle="${escapeHtml(group.caseId)}" aria-expanded="${isOpen ? "true" : "false"}">
           <span class="history-group-title">
-            <b>${escapeHtml(projectLabel(group.caseId, index < 1 ? 1 : index))} · ${escapeHtml(meta?.name || group.caseId)}</b>
+            <b>${escapeHtml(courseLabel(group.caseId, index < 1 ? 1 : index))} · ${escapeHtml(meta?.name || group.caseId)}</b>
             <small>${group.items.length} 次提交${latest === undefined ? "" : ` · 最新 ${escapeHtml(String(latest))} 分`}</small>
           </span>
           <span class="history-group-caret">▾</span>
