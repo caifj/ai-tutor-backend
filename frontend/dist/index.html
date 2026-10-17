@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="知行课程助手——汇集课程项目、学习任务、评测反馈与改进建议。"
+    />
+    <title>知行课程助手 · AI 助教</title>
+    <link rel="stylesheet" href="/assets/styles.css" />
+  </head>
+  <body>
+    <div class="page-grid" aria-hidden="true"></div>
+
+    <header class="topbar">
+      <a class="brand" href="#top" aria-label="返回首页">
+        <span class="brand-mark" aria-hidden="true">知</span>
+        <span>
+          <strong>知行实验室</strong>
+          <small>COURSE ASSISTANT</small>
+        </span>
+      </a>
+
+      <nav class="top-actions" aria-label="快捷入口">
+        <button
+          class="status-pill"
+          id="connection-status"
+          type="button"
+          title="正在检查服务状态，点击重新检查"
+          aria-label="正在检查服务状态，点击重新检查"
+        >
+          <span class="status-dot" aria-hidden="true"></span>
+        </button>
+      </nav>
+    </header>
+
+    <main id="top">
+      <section class="hero" aria-labelledby="hero-title">
+        <div class="hero-copy">
+          <p class="eyebrow"><span>01</span> AI 课程学习助手</p>
+          <h1 id="hero-title">课程学习，<br /><em>有人相助。</em></h1>
+          <p class="hero-lead">
+            汇集课程项目、实践任务与学习反馈。完成代码后即可提交评测，逐项查看完成情况，
+            根据建议持续改进自己的作品。
+          </p>
+          <div class="hero-actions">
+            <a class="primary-button" href="#module-catalog">浏览课程项目 <span>↘</span></a>
+            <button class="text-button" id="refresh-cases" type="button">刷新课程内容</button>
+          </div>
+        </div>
+
+        <div class="hero-visual" aria-label="课程助手学习流程">
+          <div class="orbit orbit-one"></div>
+          <div class="orbit orbit-two"></div>
+          <div class="core-badge">
+            <span>COURSE</span>
+            <strong>AI</strong>
+          </div>
+          <div class="capability-tag tag-json">学习</div>
+          <div class="capability-tag tag-csv">实践</div>
+          <div class="capability-tag tag-grade">反馈</div>
+          <p class="visual-caption">理解 · 实践 · 反馈<br />陪伴每一次进步</p>
+        </div>
+      </section>
+
+      <section class="overview-strip" aria-label="课程助手概览">
+        <div>
+          <span class="stat-value" id="module-count">—</span>
+          <span class="stat-label">开放项目</span>
+        </div>
+        <div>
+          <span class="stat-value">3</span>
+          <span class="stat-label">学习环节</span>
+        </div>
+        <div>
+          <span class="stat-value">随时</span>
+          <span class="stat-label">获得反馈</span>
+        </div>
+        <p>学习 · 实践 · 反馈 · 改进</p>
+      </section>
+
+      <section class="assistant-section" id="course-assistant" aria-labelledby="assistant-title">
+        <div class="section-heading assistant-heading">
+          <div>
+            <p class="eyebrow"><span>02</span> AI LEARNING GUIDE</p>
+            <h2 id="assistant-title">和课程助手聊一聊</h2>
+          </div>
+          <p>提出课程、代码与学习方法问题。助手会通过提示和追问，陪你找到自己的解题路径。</p>
+        </div>
+
+        <div class="assistant-shell">
+          <div class="assistant-guide" aria-hidden="true">
+            <span class="assistant-guide-mark" aria-hidden="true">问</span>
+          </div>
+
+          <div class="assistant-chat-card">
+            <div class="assistant-toolbar">
+              <div>
+                <span class="assistant-status-dot"></span>
+                <strong id="assistant-model-status">助手检查中</strong>
+                <small id="assistant-context">通用学习问答</small>
+              </div>
+              <button class="clear-chat-button" id="clear-assistant-chat" type="button">
+                删除聊天记录
+              </button>
+            </div>
+
+            <div class="assistant-messages" id="assistant-messages" role="log" aria-live="polite">
+              <div class="assistant-empty">
+                <strong>今天想学点什么？</strong>
+                <p>可以先说说你正在学习的课程、遇到的困难，或者选择下方项目开始实践。</p>
+              </div>
+            </div>
+
+            <div class="assistant-suggestions" aria-label="快捷提问">
+              <button type="button" data-assistant-suggestion="帮我制定今天的学习计划">制定学习计划</button>
+              <button type="button" data-assistant-suggestion="我应该怎样定位代码中的问题？">学习代码排错</button>
+              <button type="button" data-assistant-suggestion="请用提问的方式检查我是否真正理解了当前模块">检查知识理解</button>
+            </div>
+
+            <form class="assistant-composer" id="assistant-form">
+              <label class="sr-only" for="assistant-input">输入学习问题</label>
+              <textarea
+                id="assistant-input"
+                maxlength="4000"
+                rows="2"
+                placeholder="输入你的学习问题……"
+                required
+              ></textarea>
+              <button id="assistant-send" type="submit">
+                <span>发送</span>
+                <span aria-hidden="true">↗</span>
+              </button>
+            </form>
+            <p class="assistant-storage-note">聊天记录仅保存在当前浏览器中，可随时删除。</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="catalog-section" id="module-catalog" aria-labelledby="catalog-title">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow"><span>03</span> PROJECT TASK</p>
+            <h2 id="catalog-title">项目代码评测</h2>
+          </div>
+          <p>完成项目代码后，在这里提交 Python 文件并查看评测结果。</p>
+        </div>
+
+        <div class="module-grid" id="module-grid" aria-live="polite">
+          <article class="module-card skeleton-card" aria-hidden="true">
+            <div class="skeleton line-short"></div>
+            <div class="skeleton line-long"></div>
+            <div class="skeleton block"></div>
+          </article>
+        </div>
+      </section>
+
+      <section
+        class="module-introduction is-hidden"
+        id="module-introduction"
+        aria-labelledby="module-introduction-title"
+        aria-live="polite"
+      >
+        <div class="module-introduction-label">
+          <span>AI KNOWLEDGE GUIDE</span>
+          <strong id="module-introduction-title">模块知识导览</strong>
+        </div>
+        <div class="module-introduction-copy">
+          <small id="module-introduction-name">当前模块</small>
+          <p id="module-introduction-content">正在整理模块知识点……</p>
+        </div>
+      </section>
+
+      <section class="workbench-section is-hidden" id="workbench" aria-labelledby="workbench-title">
+        <div class="workbench-header">
+          <button class="back-button" id="close-workbench" type="button" aria-label="关闭实验台">←</button>
+          <div>
+            <p class="eyebrow"><span>04</span> PROJECT REVIEW</p>
+            <h2 id="workbench-title">项目评测区</h2>
+          </div>
+        </div>
+
+        <div class="workbench-layout">
+          <aside class="case-brief">
+            <span class="case-index" id="case-index">M-01</span>
+            <p class="course-label" id="case-course">课程</p>
+            <h3 id="case-name">模块名称</h3>
+            <p id="case-description">模块说明</p>
+            <div class="dataset-list">
+              <span>评测内容</span>
+              <div id="case-datasets"></div>
+            </div>
+          </aside>
+
+          <div class="execution-panel">
+            <form id="case-form">
+              <div class="panel-title-row">
+                <div>
+                  <span class="step-number">01</span>
+                  <h3 id="input-panel-title">设置实验输入</h3>
+                </div>
+                <span class="schema-note">按项目要求提交代码</span>
+              </div>
+              <div class="dynamic-fields" id="dynamic-fields"></div>
+              <button class="run-button" id="run-case" type="submit">
+                <span>运行模块</span>
+                <span class="run-icon">→</span>
+              </button>
+            </form>
+          </div>
+        </div>
+
+        <section class="result-panel is-hidden" id="result-panel" aria-labelledby="result-title">
+          <div class="result-toolbar">
+            <div>
+              <span class="step-number">02</span>
+              <h3 id="result-title">评测结果</h3>
+            </div>
+            <div class="result-actions">
+              <a class="download-button" id="download-csv" href="#">导出评测结果</a>
+            </div>
+          </div>
+          <div class="result-summary" id="result-summary"></div>
+          <div class="metric-grid" id="metric-grid"></div>
+          <div class="dataset-results" id="dataset-results"></div>
+          <div class="diagnostic-list" id="diagnostic-list"></div>
+        </section>
+
+        <section class="history-panel is-hidden" id="submission-history" aria-labelledby="history-title">
+          <div class="history-heading">
+            <div>
+              <p class="eyebrow"><span>05</span> SUBMISSION HISTORY</p>
+              <h3 id="history-title">我的提交记录</h3>
+            </div>
+            <p>源码与评测结果保存在当前浏览器中；清理浏览器数据会删除这些记录。</p>
+          </div>
+          <div class="history-layout">
+            <div class="submission-timeline" id="submission-timeline"></div>
+            <div class="diff-panel">
+              <h4>提交内容对比</h4>
+              <div class="diff-controls">
+                <label>较早提交<select id="diff-from"></select></label>
+                <span>→</span>
+                <label>较新提交<select id="diff-to"></select></label>
+                <button type="button" id="compare-versions">比较</button>
+              </div>
+              <pre class="code-diff" id="code-diff">至少提交两次后可进行比较。</pre>
+            </div>
+          </div>
+        </section>
+      </section>
+
+      <section class="empty-error is-hidden" id="global-error" role="alert">
+        <span>!</span>
+        <div>
+          <strong>暂时无法读取项目</strong>
+          <p id="global-error-message"></p>
+        </div>
+        <button type="button" id="retry-load">重试</button>
+      </section>
+    </main>
+
+    <footer>
+      <div class="footer-mark">知行</div>
+      <p>知行课程助手 · 陪伴每一次课程实践</p>
+      <p>学习 · 实践 · 反馈 · 改进</p>
+    </footer>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <script src="/config.js"></script>
+    <script src="/assets/app.js" defer></script>
+  </body>
+</html>
