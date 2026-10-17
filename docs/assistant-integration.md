@@ -2,9 +2,10 @@
 
 ## 目标与边界
 
-AI 课程助手独立位于 `backend/src/ai_tutor_backend/assistant/`，案例适配器不依赖模型 SDK，
-模型模块也不执行任何案例代码。模块只通过 `CaseDescriptor` 读取已选项目的名称、课程、
-简介和评测内容，从而生成当前学习上下文。
+AI 课程助手是独立顶层包 `backend/src/course_assistant_ai/`，不导入
+`ai_tutor_backend`、`assignment_grading`、案例适配器或存储实现，也不会执行学生代码。
+API 组合层通过 `BackendAssistantContextGateway` 将案例信息和结构化评测摘要转换成 AI
+包自有的 `LearningModuleContext`、`ReviewContext`，源码不会跨越该边界。
 
 当前模型配置为讯飞星火 `Spark-X2.5-1.7B`，默认使用 OpenAI 兼容接口：
 
@@ -109,12 +110,21 @@ API Key 永远不进入浏览器缓存，浏览器只调用同源后端接口。
 ## 目录职责
 
 ```text
-backend/src/ai_tutor_backend/assistant/
+backend/src/course_assistant_ai/
   client.py    Spark HTTP 客户端与环境配置
-  models.py    问答请求、响应和状态模型
+  models.py    AI 自有请求、响应和上下文 DTO
   policy.py    学习范围、引导式回答与模块上下文规则
-  service.py   问答和模块介绍编排
+  service.py   问答、模块介绍和点评编排
+  router.py    独立 API 路由与上下文网关协议
+
+backend/src/ai_tutor_backend/
+  assistant_gateway.py  后端模型到 AI DTO 的唯一适配层
+
+backend/src/assignment_grading/
+  grading.py     标准结果比对与评分
+  similarity.py  同案例代码相似度检查
 ```
 
 替换模型时，实现与 `CompletionClient` 相同的 `configured`、`model_name` 和
 `complete(messages)` 接口并注入 `AssistantService` 即可，案例模块与前端接口无需改变。
+架构测试会禁止 AI 包反向导入后端或批改包，并禁止批改包导入 AI 包。

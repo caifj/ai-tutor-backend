@@ -101,7 +101,9 @@ def register_cases(registry):
 
 ```text
 backend/
-  src/ai_tutor_backend/  HTTP API、AI、查重、执行与数据契约
+  src/ai_tutor_backend/     HTTP API、执行、存储、数据契约与组合根
+  src/course_assistant_ai/  独立 AI 问答、模型客户端与行为规范
+  src/assignment_grading/   独立作业批改与代码相似度检查
   cases/                 正式案例及 examples/ 接入演示案例
   tests/                 后端自动化测试
   testcase/              学生代码测试样例

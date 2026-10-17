@@ -8,6 +8,9 @@ frontend/  独立的 HTML、CSS、JavaScript 展示前端
 docs/      接口、案例接入、AI 助手与代码查重说明
 ```
 
+后端内部采用包级解耦：`course_assistant_ai` 负责 AI 能力，`assignment_grading` 负责作业
+批改，`ai_tutor_backend` 仅在应用组合层装配二者。AI 包不依赖批改模型、案例或数据库。
+
 ## 快速启动
 
 ```powershell

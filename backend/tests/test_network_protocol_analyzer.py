@@ -84,6 +84,7 @@ def test_case_registers_with_python_file_schema() -> None:
     assert set(adapter.descriptor.input_schema["properties"]) == {"filename", "source_code"}
     assert {item.case_id for item in registry.list()} == {
         "database.sql-execution-plan",
+        "algorithm.complexity-analyzer",
         "demo.echo",
         "network.protocol-analyzer",
     }
