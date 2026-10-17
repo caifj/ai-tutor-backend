@@ -1003,9 +1003,6 @@ elements.assistantInput.addEventListener("keydown", (event) => {
   }
 });
 elements.clearAssistantChat.addEventListener("click", clearAssistantContext);
-document.querySelectorAll("[data-assistant-suggestion]").forEach((button) => {
-  button.addEventListener("click", () => askAssistant(button.dataset.assistantSuggestion));
-});
 document.querySelector("#close-workbench").addEventListener("click", () => {
   elements.workbench.classList.add("is-hidden");
   window.history.replaceState(null, "", window.location.pathname);

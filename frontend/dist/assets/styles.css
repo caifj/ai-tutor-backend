@@ -640,23 +640,6 @@ footer {
   }
 }
 
-.assistant-suggestions {
-  display: flex;
-  padding: 12px 22px 0;
-  gap: 8px;
-  overflow-x: auto;
-}
-
-.assistant-suggestions button {
-  flex: 0 0 auto;
-  padding: 7px 10px;
-  color: var(--teal);
-  border: 1px solid rgba(23, 111, 104, 0.3);
-  background: rgba(23, 111, 104, 0.05);
-  font-size: 11px;
-  cursor: pointer;
-}
-
 .assistant-composer {
   display: grid;
   grid-template-columns: 1fr auto;
