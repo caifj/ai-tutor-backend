@@ -1,0 +1,17 @@
+[Unit]
+Description=AI Tutor web application
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+Restart=always
+RestartSec=5
+ExecStartPre=-/usr/bin/podman rm -f ai-tutor
+ExecStart=/usr/bin/podman run --name ai-tutor --rm --env-file /opt/ai-tutor/app.env -p 127.0.0.1:8000:8000 -v /opt/ai-tutor/data:/data:Z localhost/ai-tutor:latest
+ExecStop=/usr/bin/podman stop --time 10 ai-tutor
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target
+
