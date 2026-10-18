@@ -31,6 +31,7 @@ JSON/CSV 导出、自动校对和结构化错误讲解。当前已接入案例 3
 
 已接入正式案例：
 
+- [案例 2：虚拟内存分页模拟器代码评测](cases/virtual-memory-paging.md)
 - [案例 3：网络协议分析仪代码评测](cases/network-protocol-analyzer.md)
 - 案例 5：算法复杂度分析平台
 - 案例 7：SQL 执行计划可视化工具代码评测

@@ -910,16 +910,46 @@ function findDataset(payload, name) {
   return (payload.datasets || []).find((dataset) => dataset.name === name) || { rows: [] };
 }
 
+// 代码评测模式下由 renderCodeEvaluation 固定渲染的数据集；其余数据集视为案例自带的
+// 分析结果，统一追加渲染，这样案例可以额外输出对应表、时间线等数据而不必改动前端。
+// 曲线类数据集已由 curveBlocks 单独成块渲染，这里排除以免重复绘制。
+const EVALUATION_BUILTIN_DATASETS = new Set([
+  "functional_tests",
+  "runtime_tests",
+  "runtime_packets",
+  "runtime_observations",
+  "quality_scores",
+  "code_issues",
+]);
+
+function extraEvaluationDatasets(payload) {
+  return (payload.datasets || []).filter(
+    (dataset) =>
+      !EVALUATION_BUILTIN_DATASETS.has(dataset.name) &&
+      !isCurveDataset(dataset) &&
+      (dataset.rows || []).length > 0,
+  );
+}
+
 function renderCodeEvaluation(payload) {
   const tests = findDataset(payload, "functional_tests").rows;
   const runtimeTests = findDataset(payload, "runtime_tests").rows;
   const runtimePackets = findDataset(payload, "runtime_packets");
   const runtimeObservations = findDataset(payload, "runtime_observations");
   const algorithmColors = buildAlgorithmColorMap(payload.datasets || []);
-  const curveBlocks = (payload.datasets || [])
-    .filter((dataset) => isCurveDataset(dataset) && (dataset.rows || []).length)
+  const curveDatasets = (payload.datasets || []).filter(
+    (dataset) => isCurveDataset(dataset) && (dataset.rows || []).length,
+  );
+  const curveBlocks = curveDatasets
     .map((dataset) => renderDataset(dataset, { algorithmColors }))
     .join("");
+  const curveSectionTitle =
+    curveDatasets.map((dataset) => dataset.title).join(" / ") || "曲线数据";
+  const curveSectionHint = curveDatasets.some((dataset) =>
+    dataset.name.startsWith("runtime_"),
+  )
+    ? "基于沙箱实跑计时"
+    : "由案例提供的基准数据绘制";
   const quality = findDataset(payload, "quality_scores").rows.filter(
     (item) => item.dimension !== "重复代码",
   );
@@ -965,12 +995,15 @@ function renderCodeEvaluation(payload) {
       </details>`,
     )
     .join("");
-  const staticFunctionSection = tests.length
+const staticFunctionSection = tests.length
     ? `<section class="evaluation-section">
         <div class="dataset-title"><h4>功能检查</h4><span>${tests.filter((item) => item.passed).length} / ${tests.length} PASSED</span></div>
         <div class="evaluation-list">${testDetails}</div>
       </section>`
     : "";
+  const analysisBlocks = extraEvaluationDatasets(payload)
+    .map((dataset) => renderDataset(dataset, { algorithmColors }))
+    .join("");
   return `
     ${staticFunctionSection}
     <section class="evaluation-section">
@@ -979,14 +1012,15 @@ function renderCodeEvaluation(payload) {
       ${runtimePackets.rows.length ? renderDataset(runtimePackets) : ""}
       ${runtimeObservations.rows.length ? renderDataset(runtimeObservations) : ""}
     </section>
-    ${
+${
       curveBlocks
         ? `<section class="evaluation-section">
-      <div class="dataset-title"><h4>运行复杂度曲线</h4><span>基于沙箱实跑计时</span></div>
+      <div class="dataset-title"><h4>${escapeHtml(curveSectionTitle)}</h4><span>${escapeHtml(curveSectionHint)}</span></div>
       ${curveBlocks}
     </section>`
         : ""
     }
+    ${analysisBlocks}
     <section class="evaluation-section">
       <div class="dataset-title"><h4>代码质量</h4><span>点击展开评分依据</span></div>
       <div class="quality-grid">${qualityCards}</div>

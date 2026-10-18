@@ -122,12 +122,13 @@ def test_case_registers_with_python_file_schema() -> None:
     assert adapter.descriptor.python_static_evaluation is True
     assert adapter.descriptor.input_schema["x-ui-mode"] == "python-file"
     assert set(adapter.descriptor.input_schema["properties"]) == {"filename", "source_code"}
-    assert {item.case_id for item in registry.list()} == {
+    # 各课程会持续接入新案例，这里只断言既有案例均已注册，不断言案例全集。
+    assert {
         "database.sql-execution-plan",
         "algorithm.complexity-analyzer",
         "demo.echo",
         "network.protocol-analyzer",
-    }
+    } <= {item.case_id for item in registry.list()}
 
 
 def test_case_adapter_only_returns_case_specific_runtime_analysis() -> None:
