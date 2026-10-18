@@ -133,6 +133,37 @@ def test_invalid_input(field, value):
         asyncio.run(ProcessSchedulerCase().execute(submission, ExecutionContext(request_id="bad")))
 
 
+@pytest.mark.parametrize(
+    "submission",
+    [
+        {"filename": "a.txt", "source_code": "pass"},
+        {"filename": "a.py", "source_code": ""},
+        {"source_code": "pass"},
+        {"filename": "a.py", "source_code": "汉" * 166_667},
+    ],
+)
+def test_api_invalid_submission_returns_json_422(submission):
+    registry = CaseRegistry()
+    registry.register(ProcessSchedulerCase())
+    with TestClient(
+        create_app(registry=registry, repository=SQLiteResultRepository(":memory:")),
+        raise_server_exceptions=False,
+    ) as client:
+        response = client.post(
+            "/api/v1/executions",
+            json={
+                "case_id": "os.process-scheduler",
+                "input": submission,
+                "metadata": {"submitter": "case1-invalid-input-test"},
+            },
+        )
+    assert response.status_code == 422, response.text
+    error = response.json()["error"]
+    assert error["code"] == "case_input_error"
+    assert error["details"]["errors"]
+    assert all(isinstance(item["loc"], list) for item in error["details"]["errors"])
+
+
 def test_metrics_reject_booleans_nan_duplicates_and_bad_segments():
     expected = reference(build_requests()[0])
     for value in [True, float("nan"), float("inf"), "0", 10**400]:

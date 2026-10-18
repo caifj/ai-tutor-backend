@@ -83,7 +83,7 @@ class ProcessSchedulerCase(CaseAdapter):
         except ValidationError as exc:
             raise CaseInputError(
                 "代码文件输入不合法",
-                {"errors": exc.errors(include_context=False, include_url=False)},
+                {"errors": json.loads(exc.json(include_context=False, include_url=False))},
             ) from exc
         requests = build_requests()
         if context.runtime is None:
