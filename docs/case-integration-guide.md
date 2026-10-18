@@ -1,7 +1,7 @@
 # Case 接入开发文档
 
 本文以当前基座架构为准，说明如何接入普通数据分析型 Case 和 Python
-代码评测型 Case。现有 Case 3、Case 5、Case 7 均遵循本文约定；`demo.echo` 仅用于验证
+代码评测型 Case。现有 Case 1、Case 3、Case 5、Case 7 均遵循本文约定；`demo.echo` 仅用于验证
 最小插件机制，不作为代码评测案例参考。
 
 接入目标是让新 Case 自动获得统一 HTTP 接口、JSON/CSV 输出、结果持久化、前端模块入口、
@@ -52,6 +52,7 @@ backend/tests/
 推荐参考：
 
 ```text
+Case 1：backend/cases/case_01_process_scheduler/
 Case 3：backend/cases/case_03_network_protocol_analyzer/
 Case 5：backend/cases/case_05_alg_complex_analyzer/
 Case 7：backend/cases/case_07_sql_execution_plan/
@@ -142,7 +143,7 @@ class MyCase(CaseAdapter):
 代码评测型 Case 必须设置 `python_static_evaluation=True`，同时把 `quality_scores` 与
 `code_issues` 加入 `output_datasets`。基座会在 Case 执行完成后覆盖同名数据集并统一追加
 PEP8、模块化程度和重复代码检测结果。Case 自身只保留课程特有的运行测试和指标分析。
-Case 3、Case 5、Case 7 均采用此模式。
+Case 1、Case 3、Case 5、Case 7 均采用此模式。
 
 ### CaseDescriptor 字段
 

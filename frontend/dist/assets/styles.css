@@ -2331,3 +2331,7 @@ footer p:last-child {
 .history-group-body .timeline-item:last-child {
   border-bottom: 0;
 }
+/* Case 1 scheduling timelines: preserve time scale and allow narrow screens to scroll. */
+.scheduling-gantt { margin: 16px 0; }
+.scheduling-gantt summary { font-weight: 600; margin-bottom: 8px; cursor: pointer; }
+.scheduling-gantt-list { min-width: 0; }
