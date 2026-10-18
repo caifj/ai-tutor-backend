@@ -23,3 +23,10 @@ uvicorn ai_tutor_backend.main:app --reload
 
 默认访问 `http://127.0.0.1:8000/`。后端会以兼容模式托管 `frontend/dist/`，也可以设置
 `AI_TUTOR_SERVE_FRONTEND=0` 后分别部署前端与后端。完整说明见 [docs/README.md](docs/README.md)。
+
+## 开发与接入文档
+
+- [Case 接入开发文档](docs/case-integration-guide.md)：Case 职责边界、代码隔离运行协议、
+  统一评分、静态测评、查重、注册步骤与验收清单。
+- [标准化输出接口](docs/interface.md)：统一 JSON/CSV 结果结构和 HTTP API。
+- [代码隔离运行](docs/code-execution.md)：本地与生产沙箱模式及安全边界。
