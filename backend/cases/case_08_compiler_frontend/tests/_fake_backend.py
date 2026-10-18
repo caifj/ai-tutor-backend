@@ -150,6 +150,7 @@ class CaseDescriptor:
     version: str = "1.0.0"
     input_schema: dict = field(default_factory=dict)
     output_datasets: list[str] = field(default_factory=list)
+    python_static_evaluation: bool = False
 
     def __post_init__(self) -> None:
         if not _CASE_ID_RE.match(self.case_id):

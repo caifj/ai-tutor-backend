@@ -182,6 +182,7 @@ def test_case_registers_with_python_file_schema() -> None:
         "os.process-scheduler",
         "algorithm.complexity-analyzer",
         "database.sql-execution-plan",
+        "compiler.mini-frontend",
         "demo.echo",
         "network.protocol-analyzer",
     }

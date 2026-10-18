@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """案例 8：迷你编译器前端代码评测（CaseAdapter 实现）。
 
 评测学生提交的 Python 文件是否实现：
@@ -7,7 +6,7 @@
 * ``parse(source) -> {"ast": ..., "errors": [{"line","column","message"}]}`` 语法分析
 * 可选合并写法 ``analyze(source) -> {"tokens","ast","errors"}``
 
-静态部分由 :mod:`.evaluator` 完成，行为部分由 :mod:`.runtime_harness` 在基座沙箱中运行。
+案例只分析隔离运行产生的课程指标；PEP8、模块化和重复代码检测由基座统一完成。
 """
 from __future__ import annotations
 
@@ -33,7 +32,6 @@ from ai_tutor_backend import (
     ResultPayload,
 )
 
-from .evaluator import EvaluationReport, evaluate_python_source
 from .runtime_harness import HARNESS_SOURCE
 
 RUNTIME_RESULT_MARKER = "__AI_TUTOR_CASE8_RESULT__"
@@ -125,11 +123,6 @@ class RuntimeEvaluation:
     def pass_rate(self) -> float:
         return self.tests_passed / self.tests_total * 100 if self.tests_total else 0.0
 
-    @property
-    def earned_weight(self) -> float:
-        return sum(float(item.get("weight", 0)) for item in self.checks if item.get("passed"))
-
-
 class CodeSubmission(BaseModel):
     """浏览器中选择的单个 .py 文件。"""
 
@@ -144,7 +137,7 @@ class CodeSubmission(BaseModel):
     )
 
     @model_validator(mode="after")
-    def validate_python_file(self) -> "CodeSubmission":
+    def validate_python_file(self) -> CodeSubmission:
         if not self.filename.lower().endswith(".py"):
             raise ValueError("仅允许提交 .py 文件")
         return self
@@ -168,76 +161,58 @@ class MiniCompilerFrontendCase(CaseAdapter):
                 "提交一个 Python 文件实现 MiniC 词法/语法分析："
                 "tokenize(source) 返回带 kind/lexeme/line/column 的 Token 列表；"
                 "parse(source) 返回 {'ast': 语法树, 'errors': [{'line','column','message'}]}。"
-                "系统会静态检查接口与代码质量，并在隔离沙箱中用测试程序验证 Token 切分、"
-                "AST 构造与语法错误定位，给出通过率与总分。"
+                "系统会在隔离沙箱中验证 Token 切分、AST 构造与语法错误定位；"
+                "通用静态测评由基座统一完成。"
             ),
-            version="1.0.0",
+            version="2.0.0",
             input_schema=schema,
             output_datasets=[
-                "functional_tests",
                 "runtime_tests",
                 "ast_tree",
                 "error_locations",
                 "quality_scores",
                 "code_issues",
             ],
+            python_static_evaluation=True,
         )
 
     async def execute(self, input_data: dict, context: ExecutionContext) -> ResultPayload:
         submission = self._validate_input(input_data)
-        report = evaluate_python_source(submission.source_code)
         runtime = await self._evaluate_runtime(submission, context)
-        diagnostics = self._diagnostics(report, runtime)
+        diagnostics = self._diagnostics(runtime)
 
-        runtime_functionality_score = runtime.pass_rate / 100 * 80
         runtime_affects_score = runtime.run.status in {
             CodeExecutionStatus.SUCCEEDED,
+            CodeExecutionStatus.COMPILE_ERROR,
             CodeExecutionStatus.RUNTIME_ERROR,
             CodeExecutionStatus.TIMED_OUT,
         }
-        functionality_score = report.functionality_score
-        if report.syntax_valid and runtime_affects_score:
-            functionality_score = (report.functionality_score + runtime_functionality_score) / 2
-        overall_score = min(
-            100.0,
-            functionality_score + report.pep8_score + report.modularity_score,
-        )
+        functionality_score = runtime.pass_rate / 100 * 80 if runtime_affects_score else 0.0
 
-        if not report.syntax_valid:
-            summary = f"{submission.filename} 编译失败，请先修复 Python 语法错误后重新提交。"
+        if runtime.run.status == CodeExecutionStatus.COMPILE_ERROR:
+            summary = f"{submission.filename} 编译失败，请先修复语法错误后重新提交。"
         else:
-            judgment = "符合核心要求" if overall_score >= 70 else "尚未完全符合要求"
+            judgment = "符合案例运行要求" if functionality_score >= 64 else "尚未完全符合要求"
             if runtime.output_valid:
-                execution_summary = (
-                    f"运行测试 {runtime.tests_passed}/{runtime.tests_total} 项通过"
-                )
+                execution_summary = f"运行测试 {runtime.tests_passed}/{runtime.tests_total} 项通过"
             else:
                 execution_summary = f"运行状态 {runtime.run.status.value}"
             summary = (
-                f"{submission.filename} 评测完成：静态检查 {report.tests_passed}/"
-                f"{report.tests_total} 项通过，{execution_summary}，总分 {overall_score:.1f}/100，"
+                f"{submission.filename} 案例评测完成：{execution_summary}，案例功能得分 "
+                f"{functionality_score:.1f}/80，"
                 f"当前判断为“{judgment}”。"
             )
 
         return ResultPayload(
             summary=summary,
             datasets=[
-                self._functional_dataset(report),
                 self._runtime_dataset(runtime),
                 self._ast_dataset(runtime.observations),
                 self._error_dataset(runtime.observations),
-                self._quality_dataset(report),
-                self._issues_dataset(report),
             ],
             metrics={
-                "syntax_valid": report.syntax_valid,
-                "test_pass_rate": round(report.pass_rate, 1),
-                "tests_passed": report.tests_passed,
-                "tests_total": report.tests_total,
                 "functionality_score": round(functionality_score, 1),
-                "pep8_score": round(report.pep8_score, 1),
-                "modularity_score": round(report.modularity_score, 1),
-                "overall_score": round(overall_score, 1),
+                "overall_score": round(functionality_score, 1),
                 "compile_succeeded": runtime.run.compile_succeeded,
                 "runtime_status": runtime.run.status.value,
                 "runtime_duration_ms": round(runtime.run.duration_ms, 1),
@@ -316,23 +291,7 @@ class MiniCompilerFrontendCase(CaseAdapter):
             ) from exc
 
     @staticmethod
-    def _diagnostics(
-        report: EvaluationReport,
-        runtime: RuntimeEvaluation,
-    ) -> list[Diagnostic]:
-        if not report.syntax_valid:
-            issue = report.issues[0] if report.issues else {
-                "message": "Python 语法错误", "line": None
-            }
-            return [
-                Diagnostic(
-                    code="PYTHON_SYNTAX_ERROR",
-                    level=DiagnosticLevel.ERROR,
-                    message=issue["message"],
-                    location=f"line:{issue['line']}" if issue.get("line") else None,
-                )
-            ]
-
+    def _diagnostics(runtime: RuntimeEvaluation) -> list[Diagnostic]:
         diagnostics: list[Diagnostic] = []
         if runtime.run.output_truncated:
             diagnostics.append(Diagnostic(
@@ -344,7 +303,7 @@ class MiniCompilerFrontendCase(CaseAdapter):
             diagnostics.append(Diagnostic(
                 code="CODE_RUNNER_UNAVAILABLE",
                 level=DiagnosticLevel.WARNING,
-                message="代码运行沙箱当前不可用，本次仅保留静态分析评分。",
+                message="代码运行沙箱当前不可用，无法完成案例功能测评。",
             ))
         elif runtime.run.status == CodeExecutionStatus.COMPILE_ERROR:
             diagnostics.append(Diagnostic(
@@ -399,33 +358,9 @@ class MiniCompilerFrontendCase(CaseAdapter):
                 details={"failed": [c.get("check_id") for c in failed][:10]},
             ))
 
-        risky = [issue for issue in report.issues if issue["severity"] == "warning"]
-        if risky:
-            diagnostics.append(Diagnostic(
-                code="REVIEW_WARNINGS",
-                level=DiagnosticLevel.WARNING,
-                message=f"发现 {len(risky)} 项需要人工复核的代码问题。",
-            ))
         return diagnostics
 
     # ------------------------------------------------------------------
-    @staticmethod
-    def _functional_dataset(report: EvaluationReport) -> Dataset:
-        return Dataset(
-            name="functional_tests",
-            title="功能检查明细",
-            columns=[
-                ColumnSpec(key="check_id", title="检查项", data_type=DataType.STRING),
-                ColumnSpec(key="title", title="要求", data_type=DataType.STRING),
-                ColumnSpec(key="passed", title="通过", data_type=DataType.BOOLEAN),
-                ColumnSpec(key="weight", title="分值", data_type=DataType.NUMBER),
-                ColumnSpec(key="earned", title="得分", data_type=DataType.NUMBER),
-                ColumnSpec(key="evidence", title="代码证据", data_type=DataType.STRING),
-                ColumnSpec(key="suggestion", title="改进建议", data_type=DataType.STRING),
-            ],
-            rows=report.functional_checks,
-        )
-
     @staticmethod
     def _runtime_dataset(runtime: RuntimeEvaluation) -> Dataset:
         # 夹具里的 weight 用于算分，不属于该数据集的列，这里按列裁剪
@@ -501,34 +436,4 @@ class MiniCompilerFrontendCase(CaseAdapter):
                 ColumnSpec(key="message", title="错误信息", data_type=DataType.STRING),
             ],
             rows=rows,
-        )
-
-    @staticmethod
-    def _quality_dataset(report: EvaluationReport) -> Dataset:
-        return Dataset(
-            name="quality_scores",
-            title="代码质量评分",
-            columns=[
-                ColumnSpec(key="dimension", title="维度", data_type=DataType.STRING),
-                ColumnSpec(key="score", title="得分", data_type=DataType.NUMBER),
-                ColumnSpec(key="max_score", title="满分", data_type=DataType.NUMBER),
-                ColumnSpec(key="summary", title="结论", data_type=DataType.STRING),
-                ColumnSpec(key="details", title="评分依据", data_type=DataType.STRING),
-            ],
-            rows=report.quality_scores,
-        )
-
-    @staticmethod
-    def _issues_dataset(report: EvaluationReport) -> Dataset:
-        return Dataset(
-            name="code_issues",
-            title="代码问题与建议",
-            columns=[
-                ColumnSpec(key="severity", title="级别", data_type=DataType.STRING),
-                ColumnSpec(key="line", title="行号", data_type=DataType.INTEGER, nullable=True),
-                ColumnSpec(key="code", title="规则", data_type=DataType.STRING),
-                ColumnSpec(key="message", title="问题", data_type=DataType.STRING),
-                ColumnSpec(key="suggestion", title="建议", data_type=DataType.STRING),
-            ],
-            rows=report.issues,
         )
