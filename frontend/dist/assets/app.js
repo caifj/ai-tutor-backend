@@ -261,6 +261,7 @@ function selectCase(caseId, shouldScroll = true) {
     functional_tests: "功能完成度",
     runtime_tests: "隔离运行测试",
     runtime_packets: "基座返回报文",
+    runtime_curve: "运行复杂度曲线",
     runtime_observations: "运行输出数据",
     quality_scores: "代码质量",
     code_issues: "问题与建议",
@@ -914,6 +915,11 @@ function renderCodeEvaluation(payload) {
   const runtimeTests = findDataset(payload, "runtime_tests").rows;
   const runtimePackets = findDataset(payload, "runtime_packets");
   const runtimeObservations = findDataset(payload, "runtime_observations");
+  const algorithmColors = buildAlgorithmColorMap(payload.datasets || []);
+  const curveBlocks = (payload.datasets || [])
+    .filter((dataset) => isCurveDataset(dataset) && (dataset.rows || []).length)
+    .map((dataset) => renderDataset(dataset, { algorithmColors }))
+    .join("");
   const quality = findDataset(payload, "quality_scores").rows.filter(
     (item) => item.dimension !== "重复代码",
   );
@@ -970,6 +976,14 @@ function renderCodeEvaluation(payload) {
       ${runtimePackets.rows.length ? renderDataset(runtimePackets) : ""}
       ${runtimeObservations.rows.length ? renderDataset(runtimeObservations) : ""}
     </section>
+    ${
+      curveBlocks
+        ? `<section class="evaluation-section">
+      <div class="dataset-title"><h4>运行复杂度曲线</h4><span>基于沙箱实跑计时</span></div>
+      ${curveBlocks}
+    </section>`
+        : ""
+    }
     <section class="evaluation-section">
       <div class="dataset-title"><h4>代码质量</h4><span>点击展开评分依据</span></div>
       <div class="quality-grid">${qualityCards}</div>

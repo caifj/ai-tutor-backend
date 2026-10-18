@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 
+from ai_tutor_backend.code_execution import ExecutionRuntime, LocalPythonRunner
 from ai_tutor_backend.models import ExecutionContext
 from ai_tutor_backend.registry import CaseInputError, CaseRegistry
 from cases import register_cases
@@ -117,9 +120,14 @@ if __name__ == "__main__":
 
 
 def execute(source: str, filename: str = "student.py"):
-    return AlgorithmComplexityAnalyzerCase().execute(
-        {"filename": filename, "source_code": source},
-        ExecutionContext(request_id="test-request"),
+    return asyncio.run(
+        AlgorithmComplexityAnalyzerCase().execute(
+            {"filename": filename, "source_code": source},
+            ExecutionContext(
+                request_id="test-request",
+                runtime=ExecutionRuntime(code_runner=LocalPythonRunner()),
+            ),
+        )
     )
 
 
@@ -132,11 +140,14 @@ def test_case_registers_with_python_file_schema() -> None:
     assert isinstance(adapter, AlgorithmComplexityAnalyzerCase)
     assert adapter.descriptor.name == "算法复杂度分析平台"
     assert adapter.descriptor.course == "数据结构与算法"
-    assert adapter.descriptor.version == "3.0.0"
+    assert adapter.descriptor.version == "4.0.0"
     assert adapter.descriptor.input_schema["x-ui-mode"] == "python-file"
     assert set(adapter.descriptor.input_schema["properties"]) == {"filename", "source_code"}
     assert set(adapter.descriptor.output_datasets) == {
         "functional_tests",
+        "runtime_tests",
+        "runtime_curve",
+        "runtime_observations",
         "quality_scores",
         "code_issues",
     }
@@ -157,8 +168,28 @@ def test_complete_submission_passes_core_checks() -> None:
     assert result.metrics["test_pass_rate"] == 100.0
     assert result.metrics["functionality_score"] == 80.0
     assert result.metrics["overall_score"] >= 90
-    assert len(result.datasets[1].rows) == 2
+    assert result.metrics["runtime_status"] == "succeeded"
+    assert result.metrics["runtime_tests_passed"] == result.metrics["runtime_tests_total"]
+    assert result.metrics["runtime_pass_rate"] == 100.0
     assert all(row["passed"] for row in checks.values())
+
+
+def test_complete_submission_returns_runtime_curve() -> None:
+    result = execute(COMPLETE_SUBMISSION)
+
+    assert result.datasets[1].name == "runtime_tests"
+    curve = result.datasets[2]
+    assert curve.name == "runtime_curve"
+    assert {row["size"] for row in curve.rows} == {100, 200, 400}
+    assert {row["algorithm_name"] for row in curve.rows} == {
+        "冒泡排序",
+        "选择排序",
+        "快速排序",
+        "归并排序",
+    }
+    assert all(row["time_seconds"] >= 0 for row in curve.rows)
+    assert result.datasets[3].name == "runtime_observations"
+    assert result.datasets[4].name == "quality_scores"
 
 
 def test_incomplete_submission_gets_explainable_failures() -> None:
@@ -168,8 +199,32 @@ def test_incomplete_submission_gets_explainable_failures() -> None:
     assert result.metrics["syntax_valid"] is True
     assert result.metrics["tests_passed"] == 0
     assert any("未" in row["evidence"] for row in checks)
-    assert result.datasets[1].name == "quality_scores"
-    assert result.datasets[2].name == "code_issues"
+    assert result.metrics["runtime_status"] == "succeeded"
+    assert result.metrics["runtime_tests_passed"] == 0
+    assert result.datasets[1].name == "runtime_tests"
+    assert result.datasets[2].name == "runtime_curve"
+    assert result.datasets[4].name == "quality_scores"
+    assert result.datasets[5].name == "code_issues"
+
+
+def test_output_before_marker_still_parses() -> None:
+    result = execute('print("no-newline", end="")\n')
+
+    assert result.metrics["runtime_status"] == "succeeded"
+    assert result.metrics["runtime_tests_total"] == 7
+    assert result.metrics["runtime_tests_passed"] == 0
+    assert result.datasets[1].name == "runtime_tests"
+    assert len(result.datasets[1].rows) == 7
+    assert any(d.code == "SANDBOX_EXECUTION_COMPLETE" for d in result.diagnostics)
+
+
+def test_import_time_error_is_reported() -> None:
+    result = execute('raise ValueError("boom")\n')
+
+    assert result.metrics["runtime_status"] == "succeeded"
+    assert result.datasets[1].name == "runtime_tests"
+    assert result.datasets[1].rows[0]["evidence"].startswith("ValueError")
+    assert any(d.code == "STUDENT_CODE_LOAD_ERROR" for d in result.diagnostics)
 
 
 def test_syntax_error_returns_zero_score_and_line_number() -> None:
@@ -177,14 +232,16 @@ def test_syntax_error_returns_zero_score_and_line_number() -> None:
 
     assert result.metrics["syntax_valid"] is False
     assert result.metrics["overall_score"] == 0.0
-    assert result.datasets[2].rows[0]["line"] == 1
+    assert result.datasets[5].rows[0]["line"] == 1
     assert result.diagnostics[0].code == "PYTHON_SYNTAX_ERROR"
 
 
 @pytest.mark.parametrize("input_data", [{}, {"filename": "answer.txt", "source_code": "pass"}])
 def test_submission_rejects_missing_or_non_python_file(input_data: dict) -> None:
     with pytest.raises(CaseInputError, match="代码文件输入不合法"):
-        AlgorithmComplexityAnalyzerCase().execute(
-            input_data,
-            ExecutionContext(request_id="test-request"),
+        asyncio.run(
+            AlgorithmComplexityAnalyzerCase().execute(
+                input_data,
+                ExecutionContext(request_id="test-request"),
+            )
         )
