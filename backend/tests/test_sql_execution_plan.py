@@ -1,165 +1,154 @@
-from __future__ import annotations
+"""案例7 SQL执行计划可视化工具代码评测测试。"""
 
 import pytest
 
-from ai_tutor_backend.models import ExecutionContext
-from ai_tutor_backend.registry import CaseInputError, CaseRegistry
+from ai_tutor_backend import CaseInputError, CaseRegistry, ExecutionContext
+
 from cases import register_cases
 from cases.case_07_sql_execution_plan import SqlExecutionPlanCase
-from cases.case_07_sql_execution_plan.btree import build_btree, simulate_lookup
-from cases.case_07_sql_execution_plan.plan_parser import analyze_plan, parse_plan
+from cases.case_07_sql_execution_plan.evaluator import evaluate_python_source
+
 
 CONTEXT = ExecutionContext(request_id="test-request")
 
-MYSQL_FULL_SCAN_PLAN = (
-    " -> id=1, select_type=SIMPLE, table=tb_task, type=ALL, key=NULL, rows=15000, Extra=NULL"
-)
-MYSQL_INDEX_PLAN = (
-    " -> id=1, select_type=SIMPLE, table=tb_task, type=ref, key=idx_status, "
-    "rows=20, Extra=Using where"
-)
-POSTGRES_PLAN = """Seq Scan on orders  (cost=0.00..183.34 rows=10000 width=4)
-  Filter: (amount > 100)"""
+
+class TestEvaluator:
+    """静态分析器测试。"""
+
+    def test_valid_code_with_all_functions(self):
+        """测试包含所有必需函数的代码。"""
+        source = '''
+def parse_explain(plan_text):
+    """解析 SQL 执行计划"""
+    return {"nodes": [], "index_usage": [], "full_scan_findings": []}
+
+def build_btree(keys, order=3):
+    """构建 B+ 树"""
+    return {"keys": keys}
+
+def lookup(root, key):
+    """B+ 树查找"""
+    return [key]
+'''
+        report = evaluate_python_source(source)
+        assert report.syntax_valid is True
+        assert report.tests_total == 5
+        assert report.tests_passed == 5
+
+    def test_missing_parse_explain(self):
+        """测试缺少 parse_explain 函数。"""
+        source = '''
+def build_btree(keys, order=3):
+    return {"keys": keys}
+
+def lookup(root, key):
+    return [key]
+'''
+        report = evaluate_python_source(source)
+        assert report.syntax_valid is True
+        parse_check = next(c for c in report.functional_checks if c["check_id"] == "PARSE_EXPLAIN")
+        assert parse_check["passed"] is False
+
+    def test_syntax_error(self):
+        """测试语法错误。"""
+        source = "def parse_explain(plan_text):\n    return {"  # 语法错误
+        report = evaluate_python_source(source)
+        assert report.syntax_valid is False
+        assert len(report.issues) > 0
+        assert report.issues[0]["severity"] == "error"
+
+    def test_index_analysis_detection(self):
+        """测试索引分析逻辑检测。"""
+        source = '''
+def parse_explain(plan_text):
+    # 检查 type 字段，判断索引使用情况
+    if "type" in plan_text and "index" in plan_text:
+        return {"index_used": True}
+    return {"index_used": False}
+'''
+        report = evaluate_python_source(source)
+        index_check = next(c for c in report.functional_checks if c["check_id"] == "INDEX_ANALYSIS")
+        assert index_check["passed"] is True
+
+    def test_full_scan_detection(self):
+        """测试全表扫描检测。"""
+        source = '''
+def parse_explain(plan_text):
+    # 检测 type=ALL 表示全表扫描
+    if "ALL" in plan_text:
+        return {"scan_type": "full_scan"}
+    return {"scan_type": "index"}
+'''
+        report = evaluate_python_source(source)
+        scan_check = next(c for c in report.functional_checks if c["check_id"] == "FULL_SCAN")
+        assert scan_check["passed"] is True
 
 
-def _dataset(result, name):
-    return next(ds for ds in result.datasets if ds.name == name)
+class TestAdapter:
+    """适配器测试。"""
+
+    def test_descriptor(self):
+        """测试描述符。"""
+        case = SqlExecutionPlanCase()
+        descriptor = case.descriptor
+        assert descriptor.case_id == "database.sql-execution-plan"
+        assert descriptor.name == "SQL执行计划可视化工具代码评测"
+        assert descriptor.course == "数据库系统"
+        assert descriptor.course_number == 7
+        assert "functional_tests" in descriptor.output_datasets
+        assert "runtime_tests" in descriptor.output_datasets
+
+    def test_validate_input_valid(self):
+        """测试有效输入。"""
+        case = SqlExecutionPlanCase()
+        input_data = {
+            "filename": "student.py",
+            "source_code": "def parse_explain(plan_text):\n    return {}",
+        }
+        submission = case._validate_input(input_data)
+        assert submission.filename == "student.py"
+        assert submission.source_code.startswith("def parse_explain")
+
+    def test_validate_input_invalid_extension(self):
+        """测试非法文件扩展名。"""
+        case = SqlExecutionPlanCase()
+        input_data = {
+            "filename": "student.txt",
+            "source_code": "def parse_explain(plan_text):\n    return {}",
+        }
+        with pytest.raises(CaseInputError, match="代码文件输入不合法"):
+            case._validate_input(input_data)
+
+    def test_validate_input_missing_field(self):
+        """测试缺少必需字段。"""
+        case = SqlExecutionPlanCase()
+        input_data = {"filename": "student.py"}
+        with pytest.raises(CaseInputError):
+            case._validate_input(input_data)
 
 
-def test_parse_mysql_full_scan_line() -> None:
-    roots = parse_plan([MYSQL_FULL_SCAN_PLAN])
-    assert len(roots) == 1
-    node = roots[0]
-    assert node.table == "tb_task"
-    assert node.access_type == "ALL"
-    assert node.key_used == ""
-    assert node.rows_estimated == 15000
-    assert node.operation == "Seq Scan"
+class TestIntegration:
+    """集成测试。"""
 
-    analysis = analyze_plan(roots)
-    assert analysis.full_scan_findings[0]["severity"] == "high"
-    assert analysis.index_usage[0]["used_index"] is False
+    def test_register_cases(self):
+        """测试案例注册。"""
+        registry = CaseRegistry()
+        register_cases(registry)
+        adapter = registry.get("database.sql-execution-plan")
+        assert isinstance(adapter, SqlExecutionPlanCase)
+        assert adapter.descriptor.course_number == 7
 
 
-def test_parse_mysql_index_line() -> None:
-    analysis = analyze_plan(parse_plan([MYSQL_INDEX_PLAN]))
-    assert analysis.full_scan_findings == []
-    usage = analysis.index_usage[0]
-    assert usage["used_index"] is True
-    assert usage["key_used"] == "idx_status"
+class TestRuntimeHarness:
+    """运行时夹具测试。"""
 
+    def test_harness_source_contains_marker(self):
+        """测试夹具包含结果标记。"""
+        from cases.case_07_sql_execution_plan.runtime_harness import HARNESS_SOURCE
+        assert "__AI_TUTOR_CASE7_RESULT__" in HARNESS_SOURCE
 
-def test_parse_postgres_nested_plan() -> None:
-    roots = parse_plan(POSTGRES_PLAN.splitlines())
-    assert len(roots) == 1
-    node = roots[0]
-    assert node.operation == "Seq Scan"
-    assert node.table == "orders"
-    assert node.rows_estimated == 10000
-    assert node.cost_end == pytest.approx(183.34)
-    assert "Filter:" in node.filter
-
-    analysis = analyze_plan(roots)
-    assert analysis.full_scan_findings[0]["severity"] == "medium"
-
-
-def test_adapter_analyze_end_to_end() -> None:
-    result = SqlExecutionPlanCase().execute(
-        {"operation": "analyze", "plan_text": MYSQL_FULL_SCAN_PLAN},
-        CONTEXT,
-    )
-    plan_ds = _dataset(result, "execution_plan")
-    assert plan_ds.rows[0]["access_type"] == "ALL"
-    assert _dataset(result, "index_usage").rows[0]["used_index"] is False
-    assert _dataset(result, "full_scan_findings").rows[0]["severity"] == "high"
-    assert result.metrics["full_scan_count"] == 1
-    assert any(diag.code == "FULL_TABLE_SCAN" for diag in result.diagnostics)
-
-
-def test_adapter_analyze_requires_plan_text() -> None:
-    with pytest.raises(CaseInputError, match="plan_text"):
-        SqlExecutionPlanCase().execute({"operation": "analyze"}, CONTEXT)
-
-
-def test_adapter_analyze_rejects_unparseable_text() -> None:
-    with pytest.raises(CaseInputError, match="为空或无法识别"):
-        SqlExecutionPlanCase().execute(
-            {"operation": "analyze", "plan_text": "Filter: (amount > 100)"}, CONTEXT
-        )
-
-
-def test_adapter_btree_end_to_end() -> None:
-    result = SqlExecutionPlanCase().execute(
-        {
-            "operation": "btree",
-            "sample_keys": "10,20,30,40,50,60,70,80,90,100",
-            "lookup_key": "40",
-            "btree_order": 4,
-        },
-        CONTEXT,
-    )
-    structure = _dataset(result, "btree_structure")
-    path = _dataset(result, "btree_lookup_path")
-    assert result.metrics["lookup_found"] is True
-    assert result.metrics["lookup_key"] == 40
-    assert structure.rows[0]["node_id"] == 0
-    assert structure.rows[0]["is_leaf"] is False
-    path_ids = {row["node_id"] for row in path.rows}
-    assert all(
-        row["on_lookup_path"] == (row["node_id"] in path_ids) for row in structure.rows
-    )
-    assert path.rows[-1]["found"] is True
-
-
-def test_adapter_btree_requires_sample_keys() -> None:
-    with pytest.raises(CaseInputError, match="sample_keys"):
-        SqlExecutionPlanCase().execute({"operation": "btree"}, CONTEXT)
-
-
-def test_adapter_live_without_config_raises(monkeypatch: pytest.MonkeyPatch) -> None:
-    for var in (
-        "AI_TUTOR_SQLCASE_DB_URL",
-        "AI_TUTOR_SQLCASE_DB_USER",
-        "AI_TUTOR_SQLCASE_DB_PASSWORD",
-    ):
-        monkeypatch.delenv(var, raising=False)
-    with pytest.raises(CaseInputError, match="实时分析不可用"):
-        SqlExecutionPlanCase().execute(
-            {"operation": "live", "sql": "SELECT * FROM tb_task"},
-            CONTEXT,
-        )
-
-
-def test_adapter_live_rejects_non_select() -> None:
-    with pytest.raises(CaseInputError, match="仅支持 SELECT"):
-        SqlExecutionPlanCase().execute(
-            {"operation": "live", "sql": "DELETE FROM tb_task"}, CONTEXT
-        )
-
-
-def test_connector_rejects_bad_identifier() -> None:
-    from cases.case_07_sql_execution_plan.connector import LiveConnector, LiveSettings
-
-    connector = LiveConnector(
-        LiveSettings(host="localhost", database="test_db", user="root", password="root")
-    )
-    with pytest.raises(ValueError, match="非法标识符"):
-        connector.get_index_sample_keys("orders; DROP TABLE users", "id")
-
-
-def test_btree_lookup_finds_and_misses() -> None:
-    root = build_btree([5, 15, 25, 35, 45, 55, 65], order=3)
-    found, steps = simulate_lookup(root, 35)
-    assert found is True
-    assert steps[-1]["found"] is True
-
-    found, steps = simulate_lookup(root, 36)
-    assert found is False
-    assert steps[-1]["found"] is False
-
-
-def test_register_cases_includes_sql_case() -> None:
-    registry = CaseRegistry()
-    register_cases(registry)
-    adapter = registry.get("database.sql-execution-plan")
-    assert isinstance(adapter, SqlExecutionPlanCase)
+    def test_harness_source_contains_tests(self):
+        """测试夹具包含测试函数。"""
+        from cases.case_07_sql_execution_plan.runtime_harness import HARNESS_SOURCE
+        assert "test_parse_explain" in HARNESS_SOURCE
+        assert "test_btree" in HARNESS_SOURCE

@@ -42,9 +42,9 @@ def build_btree(keys: list[int | float | str], order: int = 5) -> BTreeNode:
             for index in range(0, len(current_level), order)
         ]
         if len(groups) > 1 and len(groups[-1]) == 1:
-            # 末组仅有 1 个节点时从前一组借一个，避免产生空键父节点
-            # （前一组必有 order >= 3 个节点，借出后仍合法）
-            groups[-1].insert(0, groups[-2].pop())
+            # 末组仅有 1 个节点时合并到前一组，避免分隔键覆盖不全
+            groups[-2].extend(groups[-1])
+            groups.pop()
         parent_level: list[BTreeNode] = []
         for group in groups:
             separators = [child.keys[0] for child in group[1:]]
