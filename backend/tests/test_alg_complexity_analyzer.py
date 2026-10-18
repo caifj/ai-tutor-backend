@@ -179,6 +179,7 @@ def test_case_registers_with_python_file_schema() -> None:
         "code_issues",
     }
     assert {item.case_id for item in registry.list()} == {
+        "os.process-scheduler",
         "algorithm.complexity-analyzer",
         "database.sql-execution-plan",
         "demo.echo",

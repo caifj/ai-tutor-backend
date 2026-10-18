@@ -264,6 +264,9 @@ function selectCase(caseId, shouldScroll = true) {
     runtime_curve: "运行复杂度曲线",
     runtime_observations: "运行输出数据",
     quality_scores: "代码质量",
+    scheduling_gantt: "调度甘特图",
+    process_metrics: "逐进程指标",
+    scheduling_summary: "平均性能指标",
     code_issues: "问题与建议",
     benchmark_curve: "时间-规模关系",
     fitted_curve: "拟合复杂度曲线",
@@ -852,10 +855,42 @@ function renderCurveChart(dataset, algorithmColors) {
   </div>`;
 }
 
+function renderSchedulingGantt(dataset) {
+  const groups = new Map();
+  for (const row of dataset.rows || []) {
+    if (!Number.isFinite(row.start) || !Number.isFinite(row.end) || row.end <= row.start) continue;
+    if (!groups.has(row.test_case)) groups.set(row.test_case, []);
+    groups.get(row.test_case).push(row);
+  }
+  const palette = ["#2563eb", "#7c3aed", "#0891b2", "#c2410c", "#15803d", "#be185d"];
+  return `<div class="scheduling-gantt-list">${[...groups].map(([name, segments]) => {
+    const total = Math.max(...segments.map((segment) => segment.end), 1);
+    const pids = [...new Set(segments.map((segment) => segment.pid))];
+    const width = Math.max(780, segments.length * 48);
+    const plotWidth = width - 48;
+    const bars = segments.map((segment) => {
+      const x = 24 + segment.start / total * plotWidth;
+      const barWidth = (segment.end - segment.start) / total * plotWidth;
+      const color = segment.pid === "IDLE" ? "#64748b" : palette[pids.indexOf(segment.pid) % palette.length];
+      const label = `${segment.pid}: ${segment.start}–${segment.end}`;
+      return `<g><title>${escapeHtml(label)}</title>
+        <rect x="${x}" y="12" width="${barWidth}" height="34" fill="${color}" stroke="white" />
+        ${barWidth >= 25 ? `<text x="${x + barWidth / 2}" y="34" text-anchor="middle" fill="white" font-size="12">${escapeHtml(segment.pid)}</text>` : ""}
+        <text x="${x}" y="65" text-anchor="middle" fill="currentColor" font-size="11">${segment.start}</text></g>`;
+    }).join("");
+    return `<details class="scheduling-gantt" ${name.endsWith("同时到达") ? "open" : ""}><summary>${escapeHtml(name)}</summary>
+      <div class="table-scroll"><svg width="${width}" height="80" role="img" aria-label="${escapeHtml(name)} 调度甘特图">${bars}
+        <text x="${width - 24}" y="65" text-anchor="middle" fill="currentColor" font-size="11">${total}</text>
+      </svg></div></details>`;
+  }).join("")}<p class="chart-caption">横轴为模拟时间；IDLE 表示 CPU 空闲。仅展示已通过调度时间线校验的学生运行结果。时间片边界保留。</p></div>`;
+}
+
 function renderDataset(dataset, options = {}) {
   const columns = dataset.columns || [];
   const rows = dataset.rows || [];
-  const chart = isCurveDataset(dataset)
+  const chart = dataset.name === "scheduling_gantt" && rows.length
+    ? renderSchedulingGantt(dataset)
+    : isCurveDataset(dataset)
     ? renderCurveChart(dataset, options.algorithmColors)
     : "";
   const table = `<div class="table-scroll">
@@ -889,7 +924,7 @@ function renderDataset(dataset, options = {}) {
         }</tbody>
       </table>
     </div>`;
-  const tableBlock = chart
+  const tableBlock = chart || ["process_metrics", "scheduling_summary"].includes(dataset.name)
     ? `<details class="dataset-table-toggle"><summary>查看数据表（${rows.length} 行）</summary>${table}</details>`
     : table;
   return `<section class="dataset-block">
@@ -915,6 +950,10 @@ function renderCodeEvaluation(payload) {
   const runtimeTests = findDataset(payload, "runtime_tests").rows;
   const runtimePackets = findDataset(payload, "runtime_packets");
   const runtimeObservations = findDataset(payload, "runtime_observations");
+  const schedulingBlocks = (payload.datasets || [])
+    .filter((dataset) => ["scheduling_gantt", "process_metrics", "scheduling_summary"].includes(dataset.name))
+    .map((dataset) => renderDataset(dataset))
+    .join("");
   const algorithmColors = buildAlgorithmColorMap(payload.datasets || []);
   const curveBlocks = (payload.datasets || [])
     .filter((dataset) => isCurveDataset(dataset) && (dataset.rows || []).length)
@@ -975,9 +1014,10 @@ function renderCodeEvaluation(payload) {
     ${staticFunctionSection}
     <section class="evaluation-section">
       <div class="dataset-title"><h4>隔离运行测试</h4><span>${runtimeTests.filter((item) => item.passed).length} / ${runtimeTests.length} PASSED</span></div>
-      <div class="evaluation-list">${runtimeDetails}</div>
+      ${schedulingBlocks ? `<details class="dataset-table-toggle"><summary>查看全部调度检查（${runtimeTests.length} 项）</summary><div class="evaluation-list">${runtimeDetails}</div></details>` : `<div class="evaluation-list">${runtimeDetails}</div>`}
       ${runtimePackets.rows.length ? renderDataset(runtimePackets) : ""}
       ${runtimeObservations.rows.length ? renderDataset(runtimeObservations) : ""}
+      ${schedulingBlocks}
     </section>
     ${
       curveBlocks
