@@ -1,87 +1,89 @@
-"""案例7 SQL执行计划可视化工具代码评测测试。"""
+"""案例 7 SQL 执行计划可视化工具代码评测测试。"""
+
+from __future__ import annotations
+
+import asyncio
 
 import pytest
+from fastapi.testclient import TestClient
 
-from ai_tutor_backend import CaseInputError, CaseRegistry, ExecutionContext
-
+from ai_tutor_backend import CaseInputError, CaseRegistry, ExecutionContext, ExecutionRuntime
+from ai_tutor_backend.app import create_app
+from ai_tutor_backend.code_execution import LocalPythonRunner
+from ai_tutor_backend.repository import SQLiteResultRepository
 from cases import register_cases
 from cases.case_07_sql_execution_plan import SqlExecutionPlanCase
-from cases.case_07_sql_execution_plan.evaluator import evaluate_python_source
 
-
-CONTEXT = ExecutionContext(request_id="test-request")
-
-
-class TestEvaluator:
-    """静态分析器测试。"""
-
-    def test_valid_code_with_all_functions(self):
-        """测试包含所有必需函数的代码。"""
-        source = '''
+COMPLETE_SUBMISSION = '''
 def parse_explain(plan_text):
-    """解析 SQL 执行计划"""
-    return {"nodes": [], "index_usage": [], "full_scan_findings": []}
+    """Parse simplified MySQL EXPLAIN rows."""
+    nodes = []
+    index_usage = []
+    full_scan_findings = []
+    for line in plan_text.splitlines():
+        fields = {}
+        for part in line.replace("->", "").split(","):
+            if "=" in part:
+                key, value = part.strip().split("=", 1)
+                fields[key] = value
+        if fields:
+            nodes.append(fields)
+            if fields.get("key") not in {None, "NULL"}:
+                index_usage.append(fields["key"])
+            if fields.get("type") == "ALL":
+                full_scan_findings.append(fields.get("table", "unknown"))
+    return {
+        "nodes": nodes,
+        "index_usage": index_usage,
+        "full_scan_findings": full_scan_findings,
+    }
+
 
 def build_btree(keys, order=3):
-    """构建 B+ 树"""
-    return {"keys": keys}
+    """Build a small test-friendly tree representation."""
+    return {"order": order, "keys": sorted(keys)}
+
 
 def lookup(root, key):
-    """B+ 树查找"""
-    return [key]
+    """Return a trace that contains the target when it exists."""
+    return [root["keys"], key] if key in root["keys"] else [root["keys"]]
 '''
-        report = evaluate_python_source(source)
-        assert report.syntax_valid is True
-        assert report.tests_total == 5
-        assert report.tests_passed == 5
 
-    def test_missing_parse_explain(self):
-        """测试缺少 parse_explain 函数。"""
-        source = '''
-def build_btree(keys, order=3):
-    return {"keys": keys}
 
-def lookup(root, key):
-    return [key]
-'''
-        report = evaluate_python_source(source)
-        assert report.syntax_valid is True
-        parse_check = next(c for c in report.functional_checks if c["check_id"] == "PARSE_EXPLAIN")
-        assert parse_check["passed"] is False
+def execute(source: str):
+    return asyncio.run(
+        SqlExecutionPlanCase().execute(
+            {"filename": "student.py", "source_code": source},
+            ExecutionContext(
+                request_id="test-request",
+                runtime=ExecutionRuntime(code_runner=LocalPythonRunner()),
+            ),
+        )
+    )
 
-    def test_syntax_error(self):
-        """测试语法错误。"""
-        source = "def parse_explain(plan_text):\n    return {"  # 语法错误
-        report = evaluate_python_source(source)
-        assert report.syntax_valid is False
-        assert len(report.issues) > 0
-        assert report.issues[0]["severity"] == "error"
 
-    def test_index_analysis_detection(self):
-        """测试索引分析逻辑检测。"""
-        source = '''
-def parse_explain(plan_text):
-    # 检查 type 字段，判断索引使用情况
-    if "type" in plan_text and "index" in plan_text:
-        return {"index_used": True}
-    return {"index_used": False}
-'''
-        report = evaluate_python_source(source)
-        index_check = next(c for c in report.functional_checks if c["check_id"] == "INDEX_ANALYSIS")
-        assert index_check["passed"] is True
+def make_client() -> TestClient:
+    registry = CaseRegistry()
+    register_cases(registry)
+    app = create_app(
+        registry=registry,
+        repository=SQLiteResultRepository(":memory:"),
+        code_runner=LocalPythonRunner(),
+    )
+    return TestClient(app)
 
-    def test_full_scan_detection(self):
-        """测试全表扫描检测。"""
-        source = '''
-def parse_explain(plan_text):
-    # 检测 type=ALL 表示全表扫描
-    if "ALL" in plan_text:
-        return {"scan_type": "full_scan"}
-    return {"scan_type": "index"}
-'''
-        report = evaluate_python_source(source)
-        scan_check = next(c for c in report.functional_checks if c["check_id"] == "FULL_SCAN")
-        assert scan_check["passed"] is True
+
+def submit(source: str) -> dict:
+    response = make_client().post(
+        "/api/v1/executions",
+        json={
+            "case_id": "database.sql-execution-plan",
+            "input": {"filename": "student.py", "source_code": source},
+            "metadata": {"submitter": "student-a"},
+        },
+    )
+    assert response.status_code == 200
+    return response.json()["payload"]
 
 
 class TestAdapter:
@@ -95,8 +97,11 @@ class TestAdapter:
         assert descriptor.name == "SQL执行计划可视化工具代码评测"
         assert descriptor.course == "数据库系统"
         assert descriptor.course_number == 7
-        assert "functional_tests" in descriptor.output_datasets
+        assert descriptor.version == "4.0.0"
+        assert descriptor.python_static_evaluation is True
+        assert "functional_tests" not in descriptor.output_datasets
         assert "runtime_tests" in descriptor.output_datasets
+        assert "quality_scores" in descriptor.output_datasets
 
     def test_validate_input_valid(self):
         """测试有效输入。"""
@@ -138,6 +143,44 @@ class TestIntegration:
         assert isinstance(adapter, SqlExecutionPlanCase)
         assert adapter.descriptor.course_number == 7
 
+    def test_case_adapter_only_returns_runtime_analysis(self):
+        result = execute(COMPLETE_SUBMISSION)
+        checks = {row["check_id"]: row for row in result.datasets[0].rows}
+
+        assert result.metrics["runtime_status"] == "succeeded"
+        assert result.metrics["runtime_tests_passed"] == result.metrics["runtime_tests_total"]
+        assert result.metrics["functionality_score"] == 80.0
+        assert result.metrics["overall_score"] == 80.0
+        assert [dataset.name for dataset in result.datasets] == ["runtime_tests"]
+        assert all(row["passed"] for row in checks.values())
+
+    def test_base_adds_generic_static_evaluation(self):
+        payload = submit(COMPLETE_SUBMISSION)
+        datasets = {dataset["name"]: dataset for dataset in payload["datasets"]}
+        dimensions = {row["dimension"] for row in datasets["quality_scores"]["rows"]}
+
+        assert payload["metrics"]["case_score"] == 80.0
+        assert payload["metrics"]["pep8_score"] > 0
+        assert payload["metrics"]["modularity_score"] > 0
+        assert dimensions == {"PEP8 规范", "模块化程度", "重复代码检测"}
+        assert "functional_tests" not in datasets
+
+    def test_missing_functions_fail_runtime_instead_of_keyword_static_checks(self):
+        result = execute("def hello():\n    return 'hello'\n")
+
+        assert result.metrics["runtime_status"] == "succeeded"
+        assert result.metrics["runtime_tests_passed"] == 0
+        assert all(not row["passed"] for row in result.datasets[0].rows)
+
+    def test_syntax_error_is_reported_by_base(self):
+        payload = submit("def broken(:\n    pass\n")
+        datasets = {dataset["name"]: dataset for dataset in payload["datasets"]}
+
+        assert payload["metrics"]["syntax_valid"] is False
+        assert payload["metrics"]["overall_score"] == 0.0
+        assert datasets["code_issues"]["rows"][0]["line"] == 1
+        assert any(item["code"] == "PYTHON_SYNTAX_ERROR" for item in payload["diagnostics"])
+
 
 class TestRuntimeHarness:
     """运行时夹具测试。"""
@@ -145,10 +188,12 @@ class TestRuntimeHarness:
     def test_harness_source_contains_marker(self):
         """测试夹具包含结果标记。"""
         from cases.case_07_sql_execution_plan.runtime_harness import HARNESS_SOURCE
+
         assert "__AI_TUTOR_CASE7_RESULT__" in HARNESS_SOURCE
 
     def test_harness_source_contains_tests(self):
         """测试夹具包含测试函数。"""
         from cases.case_07_sql_execution_plan.runtime_harness import HARNESS_SOURCE
+
         assert "test_parse_explain" in HARNESS_SOURCE
         assert "test_btree" in HARNESS_SOURCE

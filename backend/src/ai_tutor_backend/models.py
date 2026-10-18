@@ -144,6 +144,7 @@ class CaseDescriptor(StrictModel):
     version: str = "1.0.0"
     input_schema: JsonObject = Field(default_factory=dict)
     output_datasets: list[str] = Field(default_factory=list)
+    python_static_evaluation: bool = False
 
     @model_validator(mode="after")
     def require_visible_course_number(self) -> CaseDescriptor:

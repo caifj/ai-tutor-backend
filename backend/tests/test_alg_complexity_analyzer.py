@@ -3,14 +3,17 @@ from __future__ import annotations
 import asyncio
 
 import pytest
+from fastapi.testclient import TestClient
 
+from ai_tutor_backend.app import create_app
 from ai_tutor_backend.code_execution import ExecutionRuntime, LocalPythonRunner
 from ai_tutor_backend.models import ExecutionContext
 from ai_tutor_backend.registry import CaseInputError, CaseRegistry
+from ai_tutor_backend.repository import SQLiteResultRepository
 from cases import register_cases
 from cases.case_05_alg_complex_analyzer import AlgorithmComplexityAnalyzerCase
 
-COMPLETE_SUBMISSION = '''
+COMPLETE_SUBMISSION = """
 import json
 import math
 import random
@@ -116,7 +119,7 @@ def main():
 
 if __name__ == "__main__":
     main()
-'''
+"""
 
 
 def execute(source: str, filename: str = "student.py"):
@@ -131,6 +134,30 @@ def execute(source: str, filename: str = "student.py"):
     )
 
 
+def make_client() -> TestClient:
+    registry = CaseRegistry()
+    register_cases(registry)
+    app = create_app(
+        registry=registry,
+        repository=SQLiteResultRepository(":memory:"),
+        code_runner=LocalPythonRunner(),
+    )
+    return TestClient(app)
+
+
+def submit(source: str, submitter: str = "student-a") -> dict:
+    response = make_client().post(
+        "/api/v1/executions",
+        json={
+            "case_id": "algorithm.complexity-analyzer",
+            "input": {"filename": "student.py", "source_code": source},
+            "metadata": {"submitter": submitter},
+        },
+    )
+    assert response.status_code == 200
+    return response.json()["payload"]
+
+
 def test_case_registers_with_python_file_schema() -> None:
     registry = CaseRegistry()
     register_cases(registry)
@@ -140,11 +167,11 @@ def test_case_registers_with_python_file_schema() -> None:
     assert isinstance(adapter, AlgorithmComplexityAnalyzerCase)
     assert adapter.descriptor.name == "算法复杂度分析平台"
     assert adapter.descriptor.course == "数据结构与算法"
-    assert adapter.descriptor.version == "4.0.0"
+    assert adapter.descriptor.version == "5.0.0"
+    assert adapter.descriptor.python_static_evaluation is True
     assert adapter.descriptor.input_schema["x-ui-mode"] == "python-file"
     assert set(adapter.descriptor.input_schema["properties"]) == {"filename", "source_code"}
     assert set(adapter.descriptor.output_datasets) == {
-        "functional_tests",
         "runtime_tests",
         "runtime_curve",
         "runtime_observations",
@@ -163,11 +190,8 @@ def test_complete_submission_passes_core_checks() -> None:
     result = execute(COMPLETE_SUBMISSION)
     checks = {row["check_id"]: row for row in result.datasets[0].rows}
 
-    assert result.metrics["syntax_valid"] is True
-    assert result.metrics["tests_passed"] == result.metrics["tests_total"]
-    assert result.metrics["test_pass_rate"] == 100.0
     assert result.metrics["functionality_score"] == 80.0
-    assert result.metrics["overall_score"] >= 90
+    assert result.metrics["overall_score"] == 80.0
     assert result.metrics["runtime_status"] == "succeeded"
     assert result.metrics["runtime_tests_passed"] == result.metrics["runtime_tests_total"]
     assert result.metrics["runtime_pass_rate"] == 100.0
@@ -177,8 +201,8 @@ def test_complete_submission_passes_core_checks() -> None:
 def test_complete_submission_returns_runtime_curve() -> None:
     result = execute(COMPLETE_SUBMISSION)
 
-    assert result.datasets[1].name == "runtime_tests"
-    curve = result.datasets[2]
+    assert result.datasets[0].name == "runtime_tests"
+    curve = result.datasets[1]
     assert curve.name == "runtime_curve"
     assert {row["size"] for row in curve.rows} == {100, 200, 400}
     assert {row["algorithm_name"] for row in curve.rows} == {
@@ -188,23 +212,31 @@ def test_complete_submission_returns_runtime_curve() -> None:
         "归并排序",
     }
     assert all(row["time_seconds"] >= 0 for row in curve.rows)
-    assert result.datasets[3].name == "runtime_observations"
-    assert result.datasets[4].name == "quality_scores"
+    assert result.datasets[2].name == "runtime_observations"
+
+
+def test_base_adds_generic_static_evaluation() -> None:
+    payload = submit(COMPLETE_SUBMISSION)
+    datasets = {dataset["name"]: dataset for dataset in payload["datasets"]}
+    dimensions = {row["dimension"] for row in datasets["quality_scores"]["rows"]}
+
+    assert payload["metrics"]["case_score"] == 80.0
+    assert payload["metrics"]["pep8_score"] > 0
+    assert payload["metrics"]["modularity_score"] > 0
+    assert dimensions == {"PEP8 规范", "模块化程度", "重复代码检测"}
+    assert "functional_tests" not in datasets
 
 
 def test_incomplete_submission_gets_explainable_failures() -> None:
     result = execute("def hello():\n    return 'hello'\n")
     checks = result.datasets[0].rows
 
-    assert result.metrics["syntax_valid"] is True
-    assert result.metrics["tests_passed"] == 0
-    assert any("未" in row["evidence"] for row in checks)
     assert result.metrics["runtime_status"] == "succeeded"
     assert result.metrics["runtime_tests_passed"] == 0
-    assert result.datasets[1].name == "runtime_tests"
-    assert result.datasets[2].name == "runtime_curve"
-    assert result.datasets[4].name == "quality_scores"
-    assert result.datasets[5].name == "code_issues"
+    assert all(not row["passed"] for row in checks)
+    assert result.datasets[0].name == "runtime_tests"
+    assert result.datasets[1].name == "runtime_curve"
+    assert result.datasets[2].name == "runtime_observations"
 
 
 def test_output_before_marker_still_parses() -> None:
@@ -213,8 +245,8 @@ def test_output_before_marker_still_parses() -> None:
     assert result.metrics["runtime_status"] == "succeeded"
     assert result.metrics["runtime_tests_total"] == 7
     assert result.metrics["runtime_tests_passed"] == 0
-    assert result.datasets[1].name == "runtime_tests"
-    assert len(result.datasets[1].rows) == 7
+    assert result.datasets[0].name == "runtime_tests"
+    assert len(result.datasets[0].rows) == 7
     assert any(d.code == "SANDBOX_EXECUTION_COMPLETE" for d in result.diagnostics)
 
 
@@ -222,18 +254,19 @@ def test_import_time_error_is_reported() -> None:
     result = execute('raise ValueError("boom")\n')
 
     assert result.metrics["runtime_status"] == "succeeded"
-    assert result.datasets[1].name == "runtime_tests"
-    assert result.datasets[1].rows[0]["evidence"].startswith("ValueError")
+    assert result.datasets[0].name == "runtime_tests"
+    assert result.datasets[0].rows[0]["evidence"].startswith("ValueError")
     assert any(d.code == "STUDENT_CODE_LOAD_ERROR" for d in result.diagnostics)
 
 
 def test_syntax_error_returns_zero_score_and_line_number() -> None:
-    result = execute("def broken(:\n    pass\n")
+    payload = submit("def broken(:\n    pass\n")
+    datasets = {dataset["name"]: dataset for dataset in payload["datasets"]}
 
-    assert result.metrics["syntax_valid"] is False
-    assert result.metrics["overall_score"] == 0.0
-    assert result.datasets[5].rows[0]["line"] == 1
-    assert result.diagnostics[0].code == "PYTHON_SYNTAX_ERROR"
+    assert payload["metrics"]["syntax_valid"] is False
+    assert payload["metrics"]["overall_score"] == 0.0
+    assert datasets["code_issues"]["rows"][0]["line"] == 1
+    assert any(item["code"] == "PYTHON_SYNTAX_ERROR" for item in payload["diagnostics"])
 
 
 @pytest.mark.parametrize("input_data", [{}, {"filename": "answer.txt", "source_code": "pass"}])

@@ -30,7 +30,6 @@ from ai_tutor_backend import (
     ResultPayload,
 )
 
-from .evaluator import EvaluationReport, evaluate_python_source
 from .runtime_harness import HARNESS_SOURCE
 
 RUNTIME_RESULT_MARKER = "__AI_TUTOR_CASE7_RESULT__"
@@ -91,72 +90,53 @@ class SqlExecutionPlanCase(CaseAdapter):
             course="数据库系统",
             course_number=7,
             description=(
-                "提交一个 Python 文件，逐项检查其是否实现 SQL 执行计划解析、"
-                "索引使用分析、全表扫描检测、B+ 树构建与查找，并给出代码质量评分。"
+                "提交一个 Python 文件，在隔离环境中验证 SQL 执行计划解析、索引使用分析、"
+                "全表扫描检测、B+ 树构建与查找；通用静态测评由基座统一完成。"
             ),
-            version="3.0.0",
+            version="4.0.0",
             input_schema=schema,
             output_datasets=[
-                "functional_tests",
                 "runtime_tests",
                 "quality_scores",
                 "code_issues",
             ],
+            python_static_evaluation=True,
         )
 
     async def execute(self, input_data: dict, context: ExecutionContext) -> ResultPayload:
         submission = self._validate_input(input_data)
-        report = evaluate_python_source(submission.source_code)
         runtime = await self._evaluate_runtime(submission, context)
-        diagnostics = self._diagnostics(report, runtime)
+        diagnostics = self._diagnostics(runtime)
 
-        runtime_functionality_score = runtime.pass_rate / 100 * 80
         runtime_affects_score = runtime.run.status in {
             CodeExecutionStatus.SUCCEEDED,
+            CodeExecutionStatus.COMPILE_ERROR,
             CodeExecutionStatus.RUNTIME_ERROR,
             CodeExecutionStatus.TIMED_OUT,
         }
-        functionality_score = report.functionality_score
-        if report.syntax_valid and runtime_affects_score:
-            functionality_score = (report.functionality_score + runtime_functionality_score) / 2
-        overall_score = min(
-            100.0,
-            functionality_score + report.pep8_score + report.modularity_score,
-        )
+        functionality_score = runtime.pass_rate / 100 * 80 if runtime_affects_score else 0.0
 
-        if not report.syntax_valid:
+        if runtime.run.status == CodeExecutionStatus.COMPILE_ERROR:
             summary = f"{submission.filename} 编译失败，请先修复语法错误后重新提交。"
         else:
-            judgment = "符合核心要求" if overall_score >= 70 else "尚未完全符合要求"
+            judgment = "符合案例运行要求" if functionality_score >= 64 else "尚未完全符合要求"
             if runtime.output_valid:
-                execution_summary = (
-                    f"运行测试 {runtime.tests_passed}/{runtime.tests_total} 项通过"
-                )
+                execution_summary = f"运行测试 {runtime.tests_passed}/{runtime.tests_total} 项通过"
             else:
                 execution_summary = f"运行状态 {runtime.run.status.value}"
             summary = (
-                f"{submission.filename} 评测完成：静态检查 {report.tests_passed}/"
-                f"{report.tests_total} 项通过，{execution_summary}，总分 {overall_score:.1f}/100，"
-                f"当前判断为“{judgment}”。"
+                f"{submission.filename} 案例评测完成：{execution_summary}，案例功能得分 "
+                f"{functionality_score:.1f}/80，当前判断为“{judgment}”。"
             )
 
         return ResultPayload(
             summary=summary,
             datasets=[
-                self._functional_dataset(report),
                 self._runtime_dataset(runtime),
-                self._quality_dataset(report),
-                self._issues_dataset(report),
             ],
             metrics={
-                "syntax_valid": report.syntax_valid,
-                "test_pass_rate": round(report.pass_rate, 1),
-                "tests_passed": report.tests_passed,
-                "tests_total": report.tests_total,
                 "functionality_score": round(functionality_score, 1),
-                "pep8_score": round(report.pep8_score, 1),
-                "modularity_score": round(report.modularity_score, 1),
-                "overall_score": round(overall_score, 1),
+                "overall_score": round(functionality_score, 1),
                 "compile_succeeded": runtime.run.compile_succeeded,
                 "runtime_status": runtime.run.status.value,
                 "runtime_duration_ms": round(runtime.run.duration_ms, 1),
@@ -231,28 +211,23 @@ class SqlExecutionPlanCase(CaseAdapter):
             ) from exc
 
     @staticmethod
-    def _diagnostics(
-        report: EvaluationReport,
-        runtime: RuntimeEvaluation,
-    ) -> list[Diagnostic]:
-        if not report.syntax_valid:
-            issue = report.issues[0]
-            return [
-                Diagnostic(
-                    code="PYTHON_SYNTAX_ERROR",
-                    level=DiagnosticLevel.ERROR,
-                    message=issue["message"],
-                    location=f"line:{issue['line']}" if issue["line"] else None,
-                )
-            ]
-
+    def _diagnostics(runtime: RuntimeEvaluation) -> list[Diagnostic]:
         diagnostics: list[Diagnostic] = []
         if runtime.run.status == CodeExecutionStatus.UNAVAILABLE:
             diagnostics.append(
                 Diagnostic(
                     code="CODE_RUNNER_UNAVAILABLE",
                     level=DiagnosticLevel.WARNING,
-                    message="代码运行沙箱当前不可用，本次仅保留静态分析评分。",
+                    message="代码运行沙箱当前不可用，无法完成案例功能测评。",
+                )
+            )
+        elif runtime.run.status == CodeExecutionStatus.COMPILE_ERROR:
+            diagnostics.append(
+                Diagnostic(
+                    code="CODE_COMPILE_ERROR",
+                    level=DiagnosticLevel.ERROR,
+                    message="学生代码编译失败，请先修复语法错误。",
+                    details={"stderr": runtime.run.stderr[-1000:]},
                 )
             )
         elif runtime.run.status == CodeExecutionStatus.TIMED_OUT:
@@ -288,33 +263,7 @@ class SqlExecutionPlanCase(CaseAdapter):
                     message="代码运行完成，但测试夹具未返回可识别的结构化结果。",
                 )
             )
-        risky = [issue for issue in report.issues if issue["severity"] == "warning"]
-        if risky:
-            diagnostics.append(
-                Diagnostic(
-                    code="REVIEW_WARNINGS",
-                    level=DiagnosticLevel.WARNING,
-                    message=f"发现 {len(risky)} 项需要人工复核的代码问题。",
-                )
-            )
         return diagnostics
-
-    @staticmethod
-    def _functional_dataset(report: EvaluationReport) -> Dataset:
-        return Dataset(
-            name="functional_tests",
-            title="功能检查明细",
-            columns=[
-                ColumnSpec(key="check_id", title="检查项", data_type=DataType.STRING),
-                ColumnSpec(key="title", title="要求", data_type=DataType.STRING),
-                ColumnSpec(key="passed", title="通过", data_type=DataType.BOOLEAN),
-                ColumnSpec(key="weight", title="分值", data_type=DataType.NUMBER),
-                ColumnSpec(key="earned", title="得分", data_type=DataType.NUMBER),
-                ColumnSpec(key="evidence", title="代码证据", data_type=DataType.STRING),
-                ColumnSpec(key="suggestion", title="改进建议", data_type=DataType.STRING),
-            ],
-            rows=report.functional_checks,
-        )
 
     @staticmethod
     def _runtime_dataset(runtime: RuntimeEvaluation) -> Dataset:
@@ -338,39 +287,4 @@ class SqlExecutionPlanCase(CaseAdapter):
                 ColumnSpec(key="evidence", title="运行证据", data_type=DataType.STRING),
             ],
             rows=rows,
-        )
-
-    @staticmethod
-    def _quality_dataset(report: EvaluationReport) -> Dataset:
-        return Dataset(
-            name="quality_scores",
-            title="代码质量评分",
-            columns=[
-                ColumnSpec(key="dimension", title="维度", data_type=DataType.STRING),
-                ColumnSpec(key="score", title="得分", data_type=DataType.NUMBER),
-                ColumnSpec(key="max_score", title="满分", data_type=DataType.NUMBER),
-                ColumnSpec(key="summary", title="结论", data_type=DataType.STRING),
-                ColumnSpec(key="details", title="评分依据", data_type=DataType.STRING),
-            ],
-            rows=report.quality_scores,
-        )
-
-    @staticmethod
-    def _issues_dataset(report: EvaluationReport) -> Dataset:
-        return Dataset(
-            name="code_issues",
-            title="代码问题与建议",
-            columns=[
-                ColumnSpec(key="severity", title="级别", data_type=DataType.STRING),
-                ColumnSpec(
-                    key="line",
-                    title="行号",
-                    data_type=DataType.INTEGER,
-                    nullable=True,
-                ),
-                ColumnSpec(key="code", title="规则", data_type=DataType.STRING),
-                ColumnSpec(key="message", title="问题", data_type=DataType.STRING),
-                ColumnSpec(key="suggestion", title="建议", data_type=DataType.STRING),
-            ],
-            rows=report.issues,
         )

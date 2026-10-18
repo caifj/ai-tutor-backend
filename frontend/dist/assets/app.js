@@ -947,7 +947,7 @@ function renderCodeEvaluation(payload) {
           <strong>${escapeHtml(item.score)}<small>/${escapeHtml(item.max_score)}</small></strong>
         </summary>
         <p>${escapeHtml(item.summary)}</p>
-        <div class="quality-bar"><i style="width:${Math.max(0, Math.min(100, item.score * 10))}%"></i></div>
+        <div class="quality-bar"><i style="width:${Math.max(0, Math.min(100, item.max_score ? item.score / item.max_score * 100 : 0))}%"></i></div>
         <small>${escapeHtml(item.details)}</small>
       </details>`,
     )
@@ -965,11 +965,14 @@ function renderCodeEvaluation(payload) {
       </details>`,
     )
     .join("");
+  const staticFunctionSection = tests.length
+    ? `<section class="evaluation-section">
+        <div class="dataset-title"><h4>功能检查</h4><span>${tests.filter((item) => item.passed).length} / ${tests.length} PASSED</span></div>
+        <div class="evaluation-list">${testDetails}</div>
+      </section>`
+    : "";
   return `
-    <section class="evaluation-section">
-      <div class="dataset-title"><h4>功能检查</h4><span>${tests.filter((item) => item.passed).length} / ${tests.length} PASSED</span></div>
-      <div class="evaluation-list">${testDetails}</div>
-    </section>
+    ${staticFunctionSection}
     <section class="evaluation-section">
       <div class="dataset-title"><h4>隔离运行测试</h4><span>${runtimeTests.filter((item) => item.passed).length} / ${runtimeTests.length} PASSED</span></div>
       <div class="evaluation-list">${runtimeDetails}</div>

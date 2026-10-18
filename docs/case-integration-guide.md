@@ -114,6 +114,11 @@ class MyCase(CaseAdapter):
 自动按课程号升序排列，因此后续新增案例无需再修改前端。若案例仅用于底座联调、不应出现在学生
 首页，请设置 `catalog_visible=False`，此时可以不填写 `course_number`。
 
+若输入中包含 `source_code`，并希望由基座统一完成 Python 的 PEP8、模块化程度和跨提交
+重复代码检测，请在描述中设置 `python_static_evaluation=True`，同时把 `quality_scores` 与
+`code_issues` 加入 `output_datasets`。案例自身只保留课程特有的运行测试和指标分析，不要
+重复实现通用静态规则。当前 Case 3 已采用此模式。
+
 ### 输出字段选择
 
 - `summary`：给学生看的简短结论。

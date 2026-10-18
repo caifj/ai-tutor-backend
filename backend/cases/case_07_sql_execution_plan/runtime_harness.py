@@ -2,9 +2,16 @@
 
 HARNESS_SOURCE = r'''
 import json
-import sys
+import runpy
 
 MARKER = "__AI_TUTOR_CASE7_RESULT__"
+
+try:
+    submitted = runpy.run_path("student.py")
+    load_error = None
+except BaseException as exc:
+    submitted = {}
+    load_error = "{0}: {1}".format(type(exc).__name__, exc)
 
 
 def test_parse_explain():
@@ -17,6 +24,9 @@ def test_parse_explain():
 
     try:
         # 调用学生实现的 parse_explain
+        parse_explain = submitted.get("parse_explain")
+        if not callable(parse_explain):
+            raise AssertionError("未找到 parse_explain 函数")
         result = parse_explain(mysql_plan)
 
         # 验证返回类型
@@ -92,6 +102,9 @@ def test_btree():
         lookup_key = 25
 
         # 调用学生实现的 build_btree
+        build_btree = submitted.get("build_btree")
+        if not callable(build_btree):
+            raise AssertionError("未找到 build_btree 函数")
         tree = build_btree(keys, order=3)
 
         # 验证返回类型
@@ -114,7 +127,8 @@ def test_btree():
         # 调用学生实现的 lookup
         if hasattr(tree, 'lookup'):
             path = tree.lookup(lookup_key)
-        elif callable(globals().get('lookup')):
+        elif callable(submitted.get('lookup')):
+            lookup = submitted["lookup"]
             path = lookup(tree, lookup_key)
         else:
             checks.append({
@@ -172,6 +186,20 @@ def test_btree():
 def main():
     """主测试函数。"""
     all_checks = []
+
+    if load_error:
+        all_checks.append({
+            "check_id": "STUDENT_CODE_LOAD",
+            "title": "学生代码加载成功",
+            "passed": False,
+            "evidence": load_error,
+        })
+        result = {
+            "checks": all_checks,
+            "observations": {"load_error": load_error},
+        }
+        print(f"{MARKER}{json.dumps(result)}")
+        return
 
     # 测试执行计划解析
     all_checks.extend(test_parse_explain())
