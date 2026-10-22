@@ -25,7 +25,7 @@ dev = [
 ai-tutor-api = "ai_tutor_backend.main:run"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/ai_tutor_backend", "cases"]
+packages = ["src/ai_tutor_backend", "src/course_assistant_ai", "cases"]
 
 [tool.pytest.ini_options]
 addopts = "-q"

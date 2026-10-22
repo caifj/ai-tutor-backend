@@ -21,3 +21,16 @@ def test_grading_package_does_not_import_ai_package() -> None:
     source = _python_source("assignment_grading")
 
     assert "course_assistant_ai" not in source
+
+
+def test_backend_app_uses_the_decoupled_ai_package() -> None:
+    source = (SOURCE_ROOT / "ai_tutor_backend" / "app.py").read_text(encoding="utf-8")
+
+    assert "from course_assistant_ai import" in source
+    assert "from .assistant import" not in source
+
+
+def test_production_wheel_includes_the_ai_package() -> None:
+    pyproject = (SOURCE_ROOT.parent / "pyproject.toml").read_text(encoding="utf-8")
+
+    assert '"src/course_assistant_ai"' in pyproject
