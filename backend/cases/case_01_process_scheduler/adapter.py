@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
+
 from ai_tutor_backend import (
     CaseAdapter,
     CaseDescriptor,
@@ -18,7 +20,6 @@ from ai_tutor_backend import (
     PythonRunSpec,
     ResultPayload,
 )
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from .algorithms import FCFSScheduler
 from .evaluation import build_requests, reference, validate_result
@@ -67,6 +68,58 @@ class ProcessSchedulerCase(CaseAdapter):
             "或含 Process 与四个调度器类的单文件版本。评测 FCFS、非抢占 SJF、RR、"
             "非抢占优先级，展示进程指标与甘特图。桌面 GUI/系统监控另行验收。",
             input_schema=schema,
+            input_template='''def schedule(processes, algorithm, quantum=2):
+    """统一执行一种进程调度算法。
+
+    processes: list[dict]
+        待调度进程列表，每个字典必须包含：
+        - pid: str，进程唯一标识，如 "P1"
+        - arrival_time: int | float，到达就绪队列的时间，且 >= 0
+        - burst_time: int | float，需要占用 CPU 的总时长，且 > 0
+        - priority: int，优先级数值；数值越小表示优先级越高
+    algorithm: str
+        调度算法名称："fcfs"、"sjf"、"rr" 或 "priority"。
+    quantum: int | float
+        RR 时间片长度，必须 > 0；其他算法可忽略此参数。
+
+    返回: dict
+        必须包含 segments、process_metrics、summary 三个字段。
+    """
+    ...''',
+            output_summary='''segments: list[dict]
+  调度时间片；每项包含 pid、start、end。
+
+process_metrics: list[dict]
+  每个进程的到达、执行、等待、周转和响应指标。
+
+summary: dict
+  平均等待/周转/响应时间、CPU 利用率和总时长。''',
+            output_template='''{
+  "segments": [{"pid": "P1", "start": 0, "end": 2}],
+  "process_metrics": [{
+    "pid": "P1", "arrival_time": 0, "burst_time": 5,
+    "priority": 2, "first_start_time": 0,
+    "completion_time": 5, "waiting_time": 0,
+    "turnaround_time": 5, "response_time": 0
+  }],
+  "summary": {
+    "average_waiting_time": 0.0,
+    "average_turnaround_time": 5.0,
+    "average_response_time": 0.0,
+    "cpu_utilization_percent": 100.0,
+    "total_time": 5
+  }
+}''',
+            starter_filename="case01_process_scheduler_template.py",
+            starter_code='''"""课程 01：进程调度代码模板。"""
+
+from __future__ import annotations
+
+
+def schedule(processes: list[dict], algorithm: str, quantum: int | float = 2) -> dict:
+    """按指定算法调度进程并返回时间线、逐进程指标和汇总指标。"""
+    raise NotImplementedError("请实现 schedule 函数")
+''',
             output_datasets=[
                 "runtime_tests",
                 "scheduling_gantt",

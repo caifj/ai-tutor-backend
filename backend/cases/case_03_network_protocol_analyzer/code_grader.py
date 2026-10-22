@@ -85,6 +85,126 @@ class NetworkProtocolAnalyzerCase(CaseAdapter):
             ),
             version="4.0.0",
             input_schema=schema,
+            input_template='''def build_arp_packet(source_ip, target_ip):
+    # 构造 ARP 请求报文。
+    # source_ip: str，本机 IPv4 地址；target_ip: str，待查询的 IPv4 地址。
+    # 返回: 含 Ether/ARP 层且 ARP.op=1 的报文对象。
+    ...
+
+def build_icmp_packet(source_ip, target_ip):
+    # 构造 ICMP Echo Request。
+    # source_ip: str，源 IPv4；target_ip: str，目标 IPv4。
+    # 返回: 含 IP/ICMP 层且 ICMP.type=8 的报文对象。
+    ...
+
+def build_tcp_packet(source_ip, target_ip, target_port):
+    # 构造 TCP SYN 探测报文。
+    # source_ip: str，源 IPv4；target_ip: str，目标 IPv4。
+    # target_port: int，目标端口，范围 1~65535。
+    # 返回: 含 IP/TCP 层、dport 正确且 flags 含 "S" 的报文对象。
+    ...
+
+def capture_packets(interface=None, count=20):
+    # 在限定数量/超时条件下捕获报文。
+    # interface: str | None，网卡名；None 表示使用默认网卡。
+    # count: int，最多捕获的报文数，须为正整数。
+    # 返回: list | tuple，捕获到的报文集合。
+    ...
+
+def parse_arp_packet(packet):
+    # packet: 含 ARP 层的报文对象。
+    # 返回: dict，至少能体现源 IP 与目标 IP。
+    ...
+
+def parse_icmp_packet(packet):
+    # packet: 含 IP/ICMP 层的报文对象。
+    # 返回: dict，至少能体现 ICMP type 与 code。
+    ...
+
+def parse_tcp_packet(packet):
+    # packet: 含 IP/TCP 层的报文对象。
+    # 返回: dict，至少能体现源端口与目标端口。
+    ...
+
+def detect_port_scan(packets, threshold=4):
+    # packets: 可迭代报文集合；只统计 TCP SYN 探测。
+    # threshold: int，同一来源触发告警所需的不同目标端口数。
+    # 返回: list，列出达到阈值的扫描来源或结构化告警。
+    ...
+
+def analyze_network(interface=None):
+    # 统一完成抓包、解析与异常识别。
+    # interface: str | None，传给 capture_packets 的网卡名。
+    # 返回: dict，包含 packet_records 与 anomaly_findings。
+    ...''',
+            output_summary='''packet_records: list[dict]
+  结构化抓包记录，包含协议、通信端点、端口或协议字段。
+
+anomaly_findings: list[dict]
+  异常流量识别结果，端口扫描需给出来源和目标端口集合。''',
+            output_template='''{
+  "packet_records": [{
+    "protocol": "TCP", "source_ip": "10.0.0.1",
+    "target_ip": "10.0.0.2", "source_port": 40000,
+    "target_port": 443, "flags": "S"
+  }],
+  "anomaly_findings": [{
+    "type": "TCP_SYN_PORT_SCAN", "source": "10.0.0.1",
+    "distinct_ports": [21, 22, 80, 443]
+  }]
+}''',
+            starter_filename="case03_network_protocol_analyzer_template.py",
+            starter_code='''"""课程 03：网络协议分析仪代码模板。"""
+
+from __future__ import annotations
+
+from scapy.all import ARP, ICMP, IP, TCP, Ether, sniff
+
+
+def build_arp_packet(source_ip: str, target_ip: str):
+    """构造 ARP 请求报文。"""
+    raise NotImplementedError("请实现 ARP 报文构造")
+
+
+def build_icmp_packet(source_ip: str, target_ip: str):
+    """构造 ICMP Echo Request 报文。"""
+    raise NotImplementedError("请实现 ICMP 报文构造")
+
+
+def build_tcp_packet(source_ip: str, target_ip: str, target_port: int):
+    """构造 TCP SYN 探测报文。"""
+    raise NotImplementedError("请实现 TCP 报文构造")
+
+
+def capture_packets(interface: str | None = None, count: int = 20):
+    """在限定数量和超时条件下捕获报文。"""
+    raise NotImplementedError("请实现有限抓包")
+
+
+def parse_arp_packet(packet) -> dict:
+    """解析 ARP 报文的地址与操作字段。"""
+    raise NotImplementedError("请实现 ARP 报文解析")
+
+
+def parse_icmp_packet(packet) -> dict:
+    """解析 ICMP 报文的端点、类型与代码。"""
+    raise NotImplementedError("请实现 ICMP 报文解析")
+
+
+def parse_tcp_packet(packet) -> dict:
+    """解析 TCP 报文的端口与标志位。"""
+    raise NotImplementedError("请实现 TCP 报文解析")
+
+
+def detect_port_scan(packets, threshold: int = 4) -> list:
+    """识别同一来源访问多个目标端口的 SYN 扫描。"""
+    raise NotImplementedError("请实现端口扫描识别")
+
+
+def analyze_network(interface: str | None = None) -> dict:
+    """统一执行抓包、解析和异常识别。"""
+    raise NotImplementedError("请实现结构化分析入口")
+''',
             output_datasets=[
                 "runtime_tests",
                 "runtime_packets",

@@ -38,6 +38,28 @@ class EchoCase(CaseAdapter):
             description="验证输入后重复文本，用于演示案例插件的完整接入流程。",
             version="1.0.0",
             input_schema=EchoInput.model_json_schema(),
+            input_template='''{
+  "text": "操作系统",
+  "repeat": 2
+}
+
+字段说明：
+- text: str，需要重复输出的文本，长度为 1~200 个字符。
+- repeat: int，重复次数，取值范围为 1~20；省略时默认为 1。''',
+            output_summary='''messages: list[dict]
+  重复结果；每项包含 sequence（序号）和 text（文本）。''',
+            output_template='''{
+  "messages": [
+    {"sequence": 1, "text": "操作系统"},
+    {"sequence": 2, "text": "操作系统"}
+  ]
+}''',
+            starter_filename="demo_echo_template.json",
+            starter_code='''{
+  "text": "请填写要重复的文本",
+  "repeat": 1
+}
+''',
             output_datasets=["messages"],
         )
 

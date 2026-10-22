@@ -89,7 +89,6 @@ function apiUrl(path) {
 
 const elements = {
   connectionStatus: document.querySelector("#connection-status"),
-  moduleCount: document.querySelector("#module-count"),
   moduleGrid: document.querySelector("#module-grid"),
   workbench: document.querySelector("#workbench"),
   caseForm: document.querySelector("#case-form"),
@@ -113,6 +112,11 @@ const elements = {
   moduleIntroduction: document.querySelector("#module-introduction"),
   moduleIntroductionName: document.querySelector("#module-introduction-name"),
   moduleIntroductionContent: document.querySelector("#module-introduction-content"),
+  caseInputTemplate: document.querySelector("#case-input-template"),
+  caseOutputSummary: document.querySelector("#case-output-summary"),
+  caseOutputTemplate: document.querySelector("#case-output-template"),
+  caseOutputExample: document.querySelector("#case-output-example"),
+  downloadStarterTemplate: document.querySelector("#download-starter-template"),
 };
 
 function escapeHtml(value) {
@@ -136,6 +140,32 @@ function showToast(message) {
   elements.toast.classList.add("show");
   window.clearTimeout(showToast.timer);
   showToast.timer = window.setTimeout(() => elements.toast.classList.remove("show"), 2800);
+}
+
+function downloadStarterTemplate() {
+  const starterCode = typeof state.selectedCase?.starter_code === "string"
+    ? state.selectedCase.starter_code.trim()
+    : "";
+  if (!starterCode) {
+    showToast("当前课程暂未提供空白模板");
+    return;
+  }
+  const fallbackName = `${state.selectedCase.case_id.replaceAll(".", "_")}_template.py`;
+  const rawName = state.selectedCase.starter_filename || fallbackName;
+  const filename = String(rawName).replace(/[\\/:*?"<>|]/g, "_");
+  const mediaType = filename.toLowerCase().endsWith(".json")
+    ? "application/json;charset=utf-8"
+    : "text/x-python;charset=utf-8";
+  const blob = new Blob([`${starterCode}\n`], { type: mediaType });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
+  showToast(`已下载 ${filename}`);
 }
 
 async function apiRequest(path, options = {}) {
@@ -188,7 +218,6 @@ async function loadCases() {
           Number(left.course_number ?? Number.MAX_SAFE_INTEGER) -
           Number(right.course_number ?? Number.MAX_SAFE_INTEGER),
       );
-    if (elements.moduleCount) elements.moduleCount.textContent = state.cases.length;
     renderCases();
     setConnectionStatus("online", "可以提交");
 
@@ -198,7 +227,6 @@ async function loadCases() {
     }
   } catch (error) {
     state.cases = [];
-    if (elements.moduleCount) elements.moduleCount.textContent = "0";
     elements.moduleGrid.innerHTML = "";
     elements.globalErrorMessage.textContent = error.message;
     elements.globalError.classList.remove("is-hidden");
@@ -277,6 +305,27 @@ function selectCase(caseId, shouldScroll = true) {
         .map((name) => `<span class="dataset-chip">${escapeHtml(datasetLabels[name] || name)}</span>`)
         .join("")
     : '<span class="dataset-chip">动态输出</span>';
+  const inputTemplate = typeof selected.input_template === "string"
+    ? selected.input_template.trim()
+    : "";
+  const outputTemplate = typeof selected.output_template === "string"
+    ? selected.output_template.trim()
+    : "";
+  const outputSummary = typeof selected.output_summary === "string"
+    ? selected.output_summary.trim()
+    : "";
+  elements.caseInputTemplate.textContent = inputTemplate || "该课程暂未提供输入模板。";
+  elements.caseOutputSummary.textContent = outputSummary || outputTemplate
+    || "该课程暂未提供输出说明。";
+  elements.caseOutputTemplate.textContent = outputTemplate || "该课程暂未提供输出示例。";
+  elements.caseOutputExample.classList.toggle("is-hidden", !outputTemplate);
+  elements.caseOutputExample.open = false;
+  const hasStarterCode = typeof selected.starter_code === "string"
+    && selected.starter_code.trim().length > 0;
+  elements.downloadStarterTemplate.disabled = !hasStarterCode;
+  elements.downloadStarterTemplate.title = hasStarterCode
+    ? `下载 ${selected.starter_filename || "空白代码模板"}`
+    : "当前课程暂未提供空白模板";
 
   renderInputForm(selected.input_schema || {});
   elements.resultPanel.classList.add("is-hidden");
@@ -1476,10 +1525,6 @@ function lineDiff(before, after) {
   return result;
 }
 
-document.querySelector("#refresh-cases").addEventListener("click", () => {
-  loadCases();
-  document.querySelector("#module-catalog").scrollIntoView({ behavior: "smooth" });
-});
 document.querySelector("#retry-load").addEventListener("click", loadCases);
 document.querySelector("#compare-versions").addEventListener("click", renderVersionDiff);
 elements.historySubmitterFilter.addEventListener("change", (event) => {
@@ -1499,6 +1544,7 @@ elements.assistantInput.addEventListener("keydown", (event) => {
   }
 });
 elements.clearAssistantChat.addEventListener("click", clearAssistantContext);
+elements.downloadStarterTemplate.addEventListener("click", downloadStarterTemplate);
 document.querySelector("#close-workbench").addEventListener("click", () => {
   elements.workbench.classList.add("is-hidden");
   window.history.replaceState(null, "", window.location.pathname);

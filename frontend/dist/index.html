@@ -38,15 +38,14 @@
     <main id="top">
       <section class="hero" aria-labelledby="hero-title">
         <div class="hero-copy">
-          <p class="eyebrow"><span>01</span> AI 课程学习助手</p>
-          <h1 id="hero-title">课程学习，<br /><em>有人相助。</em></h1>
+          <p class="eyebrow">AI 课程学习助手</p>
+          <h1 id="hero-title">知行课程助手</h1>
           <p class="hero-lead">
             汇集课程项目、实践任务与学习反馈。完成代码后即可提交评测，逐项查看完成情况，
             根据建议持续改进自己的作品。
           </p>
           <div class="hero-actions">
             <a class="primary-button" href="#module-catalog">浏览课程项目 <span>↘</span></a>
-            <button class="text-button" id="refresh-cases" type="button">刷新课程内容</button>
           </div>
         </div>
 
@@ -64,26 +63,10 @@
         </div>
       </section>
 
-      <section class="overview-strip" aria-label="课程助手概览">
-        <div>
-          <span class="stat-value" id="module-count">—</span>
-          <span class="stat-label">开放项目</span>
-        </div>
-        <div>
-          <span class="stat-value">3</span>
-          <span class="stat-label">学习环节</span>
-        </div>
-        <div>
-          <span class="stat-value">随时</span>
-          <span class="stat-label">获得反馈</span>
-        </div>
-        <p>学习 · 实践 · 反馈 · 改进</p>
-      </section>
-
       <section class="assistant-section" id="course-assistant" aria-labelledby="assistant-title">
         <div class="section-heading assistant-heading">
           <div>
-            <p class="eyebrow"><span>02</span> AI LEARNING GUIDE</p>
+            <p class="eyebrow">AI LEARNING GUIDE</p>
             <h2 id="assistant-title">和课程助手聊一聊</h2>
           </div>
           <p>提出课程、代码与学习方法问题。助手会通过提示和追问，陪你找到自己的解题路径。</p>
@@ -135,7 +118,7 @@
       <section class="catalog-section" id="module-catalog" aria-labelledby="catalog-title">
         <div class="section-heading">
           <div>
-            <p class="eyebrow"><span>03</span> PROJECT TASK</p>
+            <p class="eyebrow">PROJECT TASK</p>
             <h2 id="catalog-title">项目代码评测</h2>
           </div>
           <p>完成项目代码后，在这里提交 Python 文件并查看评测结果。</p>
@@ -170,7 +153,7 @@
         <div class="workbench-header">
           <button class="back-button" id="close-workbench" type="button" aria-label="关闭实验台">←</button>
           <div>
-            <p class="eyebrow"><span>04</span> PROJECT REVIEW</p>
+            <p class="eyebrow">PROJECT REVIEW</p>
             <h2 id="workbench-title">项目评测区</h2>
           </div>
         </div>
@@ -184,6 +167,31 @@
             <div class="dataset-list">
               <span>评测内容</span>
               <div id="case-datasets"></div>
+            </div>
+            <div class="case-template-reference" aria-labelledby="case-template-title">
+              <div class="case-template-heading">
+                <div>
+                  <span id="case-template-title">输入输出说明</span>
+                  <small>按说明实现接口，可下载空白代码骨架</small>
+                </div>
+                <button id="download-starter-template" type="button" disabled>
+                  下载空白模板 ↓
+                </button>
+              </div>
+              <div class="case-template-grid">
+                <div class="case-template-block">
+                  <strong>输入说明</strong>
+                  <pre id="case-input-template">选择课程后显示输入说明</pre>
+                </div>
+                <div class="case-template-block">
+                  <strong>输出说明</strong>
+                  <pre id="case-output-summary">选择课程后显示输出说明</pre>
+                  <details class="case-output-example" id="case-output-example">
+                    <summary>查看完整输出示例</summary>
+                    <pre id="case-output-template">选择课程后显示输出示例</pre>
+                  </details>
+                </div>
+              </div>
             </div>
           </aside>
 
@@ -224,7 +232,7 @@
         <section class="history-panel is-hidden" id="submission-history" aria-labelledby="history-title">
           <div class="history-heading">
             <div>
-              <p class="eyebrow"><span>05</span> SUBMISSION HISTORY</p>
+              <p class="eyebrow">SUBMISSION HISTORY</p>
               <h3 id="history-title">我的提交记录</h3>
             </div>
             <div class="history-heading-actions">

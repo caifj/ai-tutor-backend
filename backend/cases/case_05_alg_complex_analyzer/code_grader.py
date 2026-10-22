@@ -91,6 +91,88 @@ class AlgorithmComplexityAnalyzerCase(CaseAdapter):
             ),
             version="5.0.0",
             input_schema=schema,
+            input_template='''def bubble_sort(data):
+    # 冒泡排序。data: list[int | float]，待排序数值列表。
+    # 返回: list，包含全部原元素的升序结果。
+    ...
+
+def selection_sort(data):
+    # 选择排序。data: list[int | float]，待排序数值列表。
+    # 返回: list，包含全部原元素的升序结果。
+    ...
+
+def quick_sort(data):
+    # 快速排序。data: list[int | float]，待排序数值列表。
+    # 返回: list，包含全部原元素的升序结果。
+    ...
+
+def merge_sort(data):
+    # 归并排序。data: list[int | float]，待排序数值列表。
+    # 返回: list，包含全部原元素的升序结果。
+    ...
+
+def linear_search(data, target):
+    # 顺序查找。
+    # data: list[int | float]，待检索列表；target: 数值，目标元素。
+    # 返回: int，命中时返回下标，未找到返回 -1。
+    ...
+
+def binary_search(data, target):
+    # 二分查找。
+    # data: 已升序的 list[int | float]；target: 数值，目标元素。
+    # 返回: int，命中时返回下标，未找到返回 -1。
+    ...''',
+            output_summary='''排序函数 -> list
+  返回包含全部原元素的升序列表。
+
+查找函数 -> int
+  命中返回目标下标，未找到返回 -1。
+
+时间-规模曲线
+  由基座调用排序函数后自动采集。''',
+            output_template='''# 排序函数：返回升序排列的新列表
+bubble_sort([3, 1, 2]) -> [1, 2, 3]
+
+# 查找函数：推荐返回目标下标，未找到返回 -1
+binary_search([1, 2, 3], 2) -> 1
+linear_search([1, 2, 3], 9) -> -1
+
+# 时间-规模曲线由基座运行上述函数后自动采集''',
+            starter_filename="case05_algorithm_complexity_template.py",
+            starter_code='''"""课程 05：算法复杂度分析代码模板。"""
+
+from __future__ import annotations
+
+
+def bubble_sort(data: list[int | float]) -> list[int | float]:
+    """使用冒泡排序返回升序列表。"""
+    raise NotImplementedError("请实现冒泡排序")
+
+
+def selection_sort(data: list[int | float]) -> list[int | float]:
+    """使用选择排序返回升序列表。"""
+    raise NotImplementedError("请实现选择排序")
+
+
+def quick_sort(data: list[int | float]) -> list[int | float]:
+    """使用快速排序返回升序列表。"""
+    raise NotImplementedError("请实现快速排序")
+
+
+def merge_sort(data: list[int | float]) -> list[int | float]:
+    """使用归并排序返回升序列表。"""
+    raise NotImplementedError("请实现归并排序")
+
+
+def linear_search(data: list[int | float], target: int | float) -> int:
+    """顺序查找目标，命中时返回下标，否则返回 -1。"""
+    raise NotImplementedError("请实现顺序查找")
+
+
+def binary_search(data: list[int | float], target: int | float) -> int:
+    """在升序列表中二分查找目标，命中时返回下标，否则返回 -1。"""
+    raise NotImplementedError("请实现二分查找")
+''',
             output_datasets=[
                 "runtime_tests",
                 "runtime_curve",

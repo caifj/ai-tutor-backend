@@ -144,6 +144,11 @@ class CaseDescriptor(StrictModel):
     version: str = "1.0.0"
     input_schema: JsonObject = Field(default_factory=dict)
     output_datasets: list[str] = Field(default_factory=list)
+    input_template: str = ""
+    output_summary: str = ""
+    output_template: str = ""
+    starter_code: str = ""
+    starter_filename: str = "student.py"
     python_static_evaluation: bool = False
 
     @model_validator(mode="after")

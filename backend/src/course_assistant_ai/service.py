@@ -3,6 +3,8 @@ from __future__ import annotations
 from typing import Protocol
 
 from .client import SparkChatClient
+from .grounding import build_grounded_system_prompt
+from .knowledge import KnowledgeDocumentLoader
 from .models import (
     AssistantMessage,
     AssistantReply,
@@ -10,7 +12,7 @@ from .models import (
     LearningModuleContext,
     ReviewContext,
 )
-from .policy import build_code_review_prompt, build_module_introduction_prompt, build_system_prompt
+from .policy import build_code_review_prompt, build_module_introduction_prompt
 
 ASSISTANT_SHORT_TEXT_MAX_CHARS = 100
 
@@ -31,6 +33,13 @@ class CompletionClient(Protocol):
     def model_name(self) -> str: ...
 
     async def complete(self, messages: list[dict[str, str]]) -> str: ...
+
+
+def build_system_prompt(module):
+    """Build the existing policy prompt and ground it with the active document."""
+
+    document = KnowledgeDocumentLoader().load()
+    return build_grounded_system_prompt(module, document.content)
 
 
 class AssistantService:

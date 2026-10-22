@@ -95,6 +95,66 @@ class SqlExecutionPlanCase(CaseAdapter):
             ),
             version="4.0.0",
             input_schema=schema,
+            input_template='''def parse_explain(plan_text):
+    # 解析 MySQL EXPLAIN 或 PostgreSQL 文本执行计划。
+    # plan_text: str，多行执行计划原文，每行描述一个计划节点。
+    # 返回: dict，包含 nodes、index_usage、full_scan_findings。
+    ...
+
+def build_btree(keys, order=3):
+    # 根据键值集合构建可查找的 B+ 树结构。
+    # keys: list[int]，需要写入索引的键；应排序并处理重复值。
+    # order: int，B+ 树阶数，表示单节点最大分支能力，且 >= 3。
+    # 返回: 树对象或等价结构，供 lookup 使用。
+    ...
+
+def lookup(tree, key):
+    # 在已构建的 B+ 树中查找键并展示访问路径。
+    # tree: build_btree 的返回值；key: int，待查找的目标键。
+    # 返回: list，按访问顺序列出经过的节点，命中结果需包含 key。
+    ...''',
+            output_summary='''nodes: list[dict]
+  执行计划节点，包含引擎、表、操作、索引和估算行数。
+
+index_usage / full_scan_findings: list
+  索引使用情况与全表扫描问题。
+
+lookup(...) -> list
+  按访问顺序返回 B+ 树查找路径。''',
+            output_template='''{
+  "nodes": [{
+    "engine": "mysql", "table": "orders",
+    "operation": "ALL", "index": None,
+    "estimated_rows": 1200, "raw": "..."
+  }],
+  "index_usage": [],
+  "full_scan_findings": [{
+    "table": "orders", "operation": "ALL",
+    "estimated_rows": 1200, "suggestion": "..."
+  }]
+}
+
+lookup(tree, 25) -> [[20, 35], [25, 30], [25, 30]]''',
+            starter_filename="case07_sql_execution_plan_template.py",
+            starter_code='''"""课程 07：SQL 执行计划与 B+ 树代码模板。"""
+
+from __future__ import annotations
+
+
+def parse_explain(plan_text: str) -> dict:
+    """解析执行计划并返回节点、索引使用和全表扫描结果。"""
+    raise NotImplementedError("请实现执行计划解析")
+
+
+def build_btree(keys: list[int], order: int = 3):
+    """根据键值列表和阶数构建 B+ 树或等价结构。"""
+    raise NotImplementedError("请实现 B+ 树构建")
+
+
+def lookup(tree, key: int) -> list:
+    """查找目标键并按顺序返回访问节点路径。"""
+    raise NotImplementedError("请实现 B+ 树查找")
+''',
             output_datasets=[
                 "runtime_tests",
                 "quality_scores",

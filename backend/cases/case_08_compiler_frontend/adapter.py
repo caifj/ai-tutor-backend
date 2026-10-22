@@ -166,6 +166,64 @@ class MiniCompilerFrontendCase(CaseAdapter):
             ),
             version="2.0.0",
             input_schema=schema,
+            input_template='''def tokenize(source):
+    # 对 MiniC 源程序进行词法分析。
+    # source: str，完整源代码文本，可能包含多行、空白和注释。
+    # 返回: list[dict]，按源码顺序排列；每个 Token 必须包含：
+    # kind（词法类别）、lexeme（原始词素）、line（行号，从 1 开始）、
+    # column（列号，从 1 开始）。
+    ...
+
+def parse(source):
+    # 对 MiniC 源程序进行语法分析并定位错误。
+    # source: str，完整源代码文本；函数内部可调用 tokenize。
+    # 返回: dict，包含 ast 与 errors。
+    # ast 为可 JSON 序列化的语法树；errors 为错误列表，每项包含
+    # line、column、message。合法程序的 errors 应为空列表。
+    ...
+
+def analyze(source):
+    # 可选的合并接口，可替代 tokenize + parse 两个独立接口。
+    # source: str，完整 MiniC 源代码文本。
+    # 返回: dict，必须同时包含 tokens、ast、errors。
+    ...''',
+            output_summary='''tokens: list[dict]
+  Token 序列；每项包含 kind、lexeme、line、column。
+
+ast: dict | list
+  可 JSON 序列化的抽象语法树。
+
+errors: list[dict]
+  语法错误；每项包含 line、column、message。''',
+            output_template='''{
+  "tokens": [{
+    "kind": "IDENTIFIER", "lexeme": "main",
+    "line": 1, "column": 8
+  }],
+  "ast": {"type": "Program", "body": []},
+  "errors": [{
+    "line": 3, "column": 15,
+    "message": "缺少右括号"
+  }]
+}''',
+            starter_filename="case08_compiler_frontend_template.py",
+            starter_code='''"""课程 08：MiniC 编译器前端代码模板。"""
+
+from __future__ import annotations
+
+
+def tokenize(source: str) -> list[dict]:
+    """把 MiniC 源代码切分为带类别、词素及行列位置的 Token。"""
+    raise NotImplementedError("请实现词法分析")
+
+
+def parse(source: str) -> dict:
+    """解析 MiniC 源代码并返回 ast 与 errors。"""
+    raise NotImplementedError("请实现语法分析")
+
+
+# 也可以自行改为 analyze(source) -> {"tokens": ..., "ast": ..., "errors": ...}
+''',
             output_datasets=[
                 "runtime_tests",
                 "ast_tree",
